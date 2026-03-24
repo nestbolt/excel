@@ -209,7 +209,7 @@ export async function populateSheet(
   // --- auto-size ----------------------------------------------------
   if (isShouldAutoSize(exportable)) {
     worksheet.columns.forEach((column) => {
-      if (!column || !column.eachCell) return;
+      if (!column?.eachCell) return;
       let maxLen = 10;
       column.eachCell({ includeEmpty: false }, (cell) => {
         const val = cell.value;
