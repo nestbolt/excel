@@ -2,7 +2,7 @@
   "name": "@nestbolt/excel",
   "version": "0.1.0",
   "packageManager": "pnpm@9.15.4",
-  "description": "Supercharged Excel and CSV exports for NestJS.",
+  "description": "Supercharged Excel and CSV exports for NestJS applications. Effortlessly create and download spreadsheets with powerful features and seamless integration.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {
@@ -19,6 +19,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:cov": "vitest run --coverage",
+    "test:results": "npx vitest run --coverage 2>&1 | grep -E \"All files|%\" | head -10",
     "lint": "eslint 'src/**/*.ts' 'test/**/*.ts'",
     "lint:fix": "eslint 'src/**/*.ts' 'test/**/*.ts' --fix",
     "format": "prettier --write 'src/**/*.ts' 'test/**/*.ts'",

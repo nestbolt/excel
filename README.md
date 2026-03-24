@@ -1,6 +1,6 @@
 <p align="center">
     <h1 align="center">@nestbolt/excel</h1>
-    <p align="center">Supercharged Excel and CSV exports for NestJS.</p>
+    <p align="center">Supercharged Excel and CSV exports for NestJS applications. Effortlessly create and download spreadsheets with powerful features and seamless integration.</p>
 </p>
 
 <p align="center">
