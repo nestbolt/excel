@@ -2,7 +2,9 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { Test, TestingModule } from "@nestjs/testing";
 import { Workbook } from "exceljs";
 import { ExcelService } from "../src/excel.service";
+import { ExcelModule } from "../src/excel.module";
 import { EXCEL_OPTIONS, ExcelType } from "../src/excel.constants";
+import { detectType, parseCellRef, columnLetterToNumber } from "../src/helpers";
 import type {
   FromCollection,
   FromArray,
@@ -696,6 +698,632 @@ describe("ExcelService", () => {
       expect(rows[2]).toEqual([2, "Bob Jones", 60000]);
 
       expect(ws.getCell("A1").font.bold).toBe(true);
+    });
+  });
+
+  /* ---------------------------------------------------------------- */
+  /*  ExcelModule forRoot / forRootAsync                               */
+  /* ---------------------------------------------------------------- */
+
+  describe("ExcelModule", () => {
+    it("forRoot() should return a valid DynamicModule", () => {
+      const mod = ExcelModule.forRoot({ defaultType: "csv" });
+      expect(mod.module).toBe(ExcelModule);
+      expect(mod.global).toBe(true);
+      expect(mod.providers).toBeDefined();
+      expect(mod.exports).toBeDefined();
+    });
+
+    it("forRoot() should work with no arguments", () => {
+      const mod = ExcelModule.forRoot();
+      expect(mod.module).toBe(ExcelModule);
+    });
+
+    it("forRootAsync() should return a valid DynamicModule", () => {
+      const mod = ExcelModule.forRootAsync({
+        useFactory: () => ({ defaultType: "xlsx" }),
+      });
+      expect(mod.module).toBe(ExcelModule);
+      expect(mod.global).toBe(true);
+    });
+
+    it("forRootAsync() should accept imports and inject", () => {
+      const mod = ExcelModule.forRootAsync({
+        imports: [],
+        inject: ["CONFIG"],
+        useFactory: () => ({}),
+      });
+      expect(mod.imports).toEqual([]);
+    });
+  });
+
+  /* ---------------------------------------------------------------- */
+  /*  Helpers: detectType, parseCellRef, columnLetterToNumber          */
+  /* ---------------------------------------------------------------- */
+
+  describe("helpers", () => {
+    it("detectType should return XLSX for .xlsx", () => {
+      expect(detectType("report.xlsx")).toBe(ExcelType.XLSX);
+    });
+
+    it("detectType should return CSV for .csv", () => {
+      expect(detectType("report.csv")).toBe(ExcelType.CSV);
+    });
+
+    it("detectType should return fallback for unknown extension", () => {
+      expect(detectType("report.unknown")).toBe(ExcelType.XLSX);
+      expect(detectType("report.unknown", ExcelType.CSV)).toBe(ExcelType.CSV);
+    });
+
+    it("detectType should return fallback for no extension", () => {
+      expect(detectType("report")).toBe(ExcelType.XLSX);
+    });
+
+    it("parseCellRef should parse valid references", () => {
+      expect(parseCellRef("A1")).toEqual({ col: 1, row: 1 });
+      expect(parseCellRef("C3")).toEqual({ col: 3, row: 3 });
+      expect(parseCellRef("AA10")).toEqual({ col: 27, row: 10 });
+    });
+
+    it("parseCellRef should throw for invalid references", () => {
+      expect(() => parseCellRef("")).toThrow("Invalid cell reference");
+      expect(() => parseCellRef("123")).toThrow("Invalid cell reference");
+      expect(() => parseCellRef("!@#")).toThrow("Invalid cell reference");
+    });
+
+    it("columnLetterToNumber should convert letters", () => {
+      expect(columnLetterToNumber("A")).toBe(1);
+      expect(columnLetterToNumber("Z")).toBe(26);
+      expect(columnLetterToNumber("AA")).toBe(27);
+      expect(columnLetterToNumber("AZ")).toBe(52);
+    });
+  });
+
+  /* ---------------------------------------------------------------- */
+  /*  WithStyles — full coverage (borders, fill, alignment, column)    */
+  /* ---------------------------------------------------------------- */
+
+  describe("WithStyles — full coverage", () => {
+    it("should apply border styles", async () => {
+      class BorderExport implements FromCollection, WithStyles {
+        collection() {
+          return [["data"]];
+        }
+        styles() {
+          return {
+            A1: {
+              border: {
+                top: { style: "thin" as const, color: "000000" },
+                bottom: { style: "medium" as const, color: "FF0000" },
+                left: { style: "dashed" as const },
+                right: { style: "double" as const },
+              },
+            },
+          };
+        }
+      }
+
+      const buffer = await service.raw(new BorderExport(), ExcelType.XLSX);
+      const wb = await readXlsx(buffer);
+      const cell = wb.worksheets[0].getCell("A1");
+      expect(cell.border.top?.style).toBe("thin");
+      expect(cell.border.bottom?.style).toBe("medium");
+      expect(cell.border.left?.style).toBe("dashed");
+      expect(cell.border.right?.style).toBe("double");
+    });
+
+    it("should apply fill styles", async () => {
+      class FillExport implements FromCollection, WithStyles {
+        collection() {
+          return [["data"]];
+        }
+        styles() {
+          return {
+            A1: {
+              fill: { fgColor: "FFFF00" },
+            },
+          };
+        }
+      }
+
+      const buffer = await service.raw(new FillExport(), ExcelType.XLSX);
+      const wb = await readXlsx(buffer);
+      const cell = wb.worksheets[0].getCell("A1");
+      expect((cell.fill as any)?.fgColor?.argb).toBe("FFFFFF00");
+    });
+
+    it("should apply alignment styles", async () => {
+      class AlignExport implements FromCollection, WithStyles {
+        collection() {
+          return [["data"]];
+        }
+        styles() {
+          return {
+            A1: {
+              alignment: { horizontal: "center" as const, wrapText: true },
+            },
+          };
+        }
+      }
+
+      const buffer = await service.raw(new AlignExport(), ExcelType.XLSX);
+      const wb = await readXlsx(buffer);
+      const cell = wb.worksheets[0].getCell("A1");
+      expect(cell.alignment.horizontal).toBe("center");
+      expect(cell.alignment.wrapText).toBe(true);
+    });
+
+    it("should apply numFmt via styles", async () => {
+      class NumFmtExport implements FromCollection, WithStyles {
+        collection() {
+          return [[1234.5]];
+        }
+        styles() {
+          return {
+            A1: { numFmt: "#,##0.00" },
+          };
+        }
+      }
+
+      const buffer = await service.raw(new NumFmtExport(), ExcelType.XLSX);
+      const wb = await readXlsx(buffer);
+      const cell = wb.worksheets[0].getCell("A1");
+      expect(cell.numFmt).toBe("#,##0.00");
+    });
+
+    it("should apply styles to a column letter", async () => {
+      class ColStyleExport implements FromCollection, WithStyles {
+        collection() {
+          return [
+            ["row1-a", "row1-b"],
+            ["row2-a", "row2-b"],
+          ];
+        }
+        styles() {
+          return {
+            A: { font: { italic: true } },
+          };
+        }
+      }
+
+      const buffer = await service.raw(new ColStyleExport(), ExcelType.XLSX);
+      const wb = await readXlsx(buffer);
+      const ws = wb.worksheets[0];
+      expect(ws.getCell("A1").font.italic).toBe(true);
+      expect(ws.getCell("A2").font.italic).toBe(true);
+    });
+
+    it("should apply font color and name", async () => {
+      class FontDetailExport implements FromCollection, WithStyles {
+        collection() {
+          return [["data"]];
+        }
+        styles() {
+          return {
+            A1: {
+              font: {
+                name: "Arial",
+                color: "#FF0000",
+                underline: true,
+                strike: true,
+              },
+            },
+          };
+        }
+      }
+
+      const buffer = await service.raw(
+        new FontDetailExport(),
+        ExcelType.XLSX,
+      );
+      const wb = await readXlsx(buffer);
+      const cell = wb.worksheets[0].getCell("A1");
+      expect(cell.font.name).toBe("Arial");
+      expect(cell.font.color?.argb).toBe("FFFF0000");
+      expect(cell.font.underline).toBe(true);
+      expect(cell.font.strike).toBe(true);
+    });
+
+    it("should apply fill with bgColor", async () => {
+      class BgFillExport implements FromCollection, WithStyles {
+        collection() {
+          return [["data"]];
+        }
+        styles() {
+          return {
+            A1: {
+              fill: {
+                type: "pattern" as const,
+                pattern: "solid" as const,
+                fgColor: "00FF00",
+                bgColor: "0000FF",
+              },
+            },
+          };
+        }
+      }
+
+      const buffer = await service.raw(new BgFillExport(), ExcelType.XLSX);
+      const wb = await readXlsx(buffer);
+      const cell = wb.worksheets[0].getCell("A1");
+      expect((cell.fill as any)?.fgColor?.argb).toBe("FF00FF00");
+      expect((cell.fill as any)?.bgColor?.argb).toBe("FF0000FF");
+    });
+  });
+
+  /* ---------------------------------------------------------------- */
+  /*  WithProperties — all fields                                      */
+  /* ---------------------------------------------------------------- */
+
+  describe("WithProperties — all fields", () => {
+    it("should set all document properties", async () => {
+      class AllPropsExport implements FromCollection, WithProperties {
+        collection() {
+          return [["data"]];
+        }
+        properties() {
+          return {
+            creator: "App",
+            lastModifiedBy: "Admin",
+            title: "Report",
+            subject: "Data",
+            description: "A test report",
+            keywords: "test,report",
+            category: "Reports",
+            company: "TestCo",
+            manager: "Boss",
+          };
+        }
+      }
+
+      const buffer = await service.raw(new AllPropsExport(), ExcelType.XLSX);
+      const wb = await readXlsx(buffer);
+      expect(wb.creator).toBe("App");
+      expect(wb.lastModifiedBy).toBe("Admin");
+      expect(wb.title).toBe("Report");
+      expect(wb.subject).toBe("Data");
+      expect(wb.description).toBe("A test report");
+      expect(wb.keywords).toBe("test,report");
+      expect(wb.category).toBe("Reports");
+      expect(wb.company).toBe("TestCo");
+      expect(wb.manager).toBe("Boss");
+    });
+  });
+
+  /* ---------------------------------------------------------------- */
+  /*  store() — creates parent directories                             */
+  /* ---------------------------------------------------------------- */
+
+  describe("store() — nested directory creation", () => {
+    it("should create parent directories if they do not exist", async () => {
+      const fs = await import("fs");
+      const os = await import("os");
+      const path = await import("path");
+
+      class SimpleExport implements FromCollection {
+        collection() {
+          return [["nested"]];
+        }
+      }
+
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "excel-nest-"));
+      const filePath = path.join(tmpDir, "deep", "nested", "output.xlsx");
+
+      try {
+        await service.store(new SimpleExport(), filePath);
+        expect(fs.existsSync(filePath)).toBe(true);
+      } finally {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+      }
+    });
+  });
+
+  /* ---------------------------------------------------------------- */
+  /*  ShouldAutoSize — edge cases                                      */
+  /* ---------------------------------------------------------------- */
+
+  describe("ShouldAutoSize — edge cases", () => {
+    it("should handle null and short values in auto-size", async () => {
+      class NullAutoSize implements FromCollection, ShouldAutoSize {
+        readonly shouldAutoSize = true as const;
+        collection() {
+          return [[null, undefined, "", "ab"]];
+        }
+      }
+
+      const buffer = await service.raw(new NullAutoSize(), ExcelType.XLSX);
+      const wb = await readXlsx(buffer);
+      const ws = wb.worksheets[0];
+      // All columns should have a width (min 10 + 2 = 12)
+      expect(ws.getColumn(1).width).toBeGreaterThanOrEqual(12);
+    });
+  });
+
+  /* ---------------------------------------------------------------- */
+  /*  WithStyles — partial borders and no-match key                    */
+  /* ---------------------------------------------------------------- */
+
+  describe("WithStyles — partial borders", () => {
+    it("should handle border with only top and bottom", async () => {
+      class PartialBorderExport implements FromCollection, WithStyles {
+        collection() {
+          return [["data"]];
+        }
+        styles() {
+          return {
+            A1: {
+              border: {
+                top: { style: "thin" as const },
+                bottom: { style: "thin" as const },
+              },
+            },
+          };
+        }
+      }
+
+      const buffer = await service.raw(
+        new PartialBorderExport(),
+        ExcelType.XLSX,
+      );
+      const wb = await readXlsx(buffer);
+      const cell = wb.worksheets[0].getCell("A1");
+      expect(cell.border.top?.style).toBe("thin");
+      expect(cell.border.bottom?.style).toBe("thin");
+      expect(cell.border.left).toBeUndefined();
+      expect(cell.border.right).toBeUndefined();
+    });
+
+    it("should handle border with only left and right", async () => {
+      class LRBorderExport implements FromCollection, WithStyles {
+        collection() {
+          return [["data"]];
+        }
+        styles() {
+          return {
+            A1: {
+              border: {
+                left: { style: "medium" as const },
+                right: { style: "medium" as const },
+              },
+            },
+          };
+        }
+      }
+
+      const buffer = await service.raw(new LRBorderExport(), ExcelType.XLSX);
+      const wb = await readXlsx(buffer);
+      const cell = wb.worksheets[0].getCell("A1");
+      expect(cell.border.left?.style).toBe("medium");
+      expect(cell.border.right?.style).toBe("medium");
+    });
+  });
+
+  /* ---------------------------------------------------------------- */
+  /*  WithEvents — partial handlers                                    */
+  /* ---------------------------------------------------------------- */
+
+  describe("WithEvents — partial handlers", () => {
+    it("should handle only some events registered", async () => {
+      const fired: string[] = [];
+
+      class PartialEventExport implements FromCollection, WithEvents {
+        collection() {
+          return [["data"]];
+        }
+        registerEvents() {
+          return {
+            [ExcelExportEvent.AFTER_SHEET]: () => {
+              fired.push("afterSheet");
+            },
+          };
+        }
+      }
+
+      await service.raw(new PartialEventExport(), ExcelType.XLSX);
+      // Only afterSheet should fire; others should not throw
+      expect(fired).toEqual(["afterSheet"]);
+    });
+  });
+
+  /* ---------------------------------------------------------------- */
+  /*  WithProperties — partial properties                              */
+  /* ---------------------------------------------------------------- */
+
+  describe("WithProperties — partial/empty properties", () => {
+    it("should handle empty properties object", async () => {
+      class EmptyPropsExport implements FromCollection, WithProperties {
+        collection() {
+          return [["data"]];
+        }
+        properties() {
+          return {};
+        }
+      }
+
+      const buffer = await service.raw(
+        new EmptyPropsExport(),
+        ExcelType.XLSX,
+      );
+      const wb = await readXlsx(buffer);
+      // Should not throw and workbook should be valid
+      expect(wb.worksheets).toHaveLength(1);
+    });
+
+    it("should set only specified properties", async () => {
+      class SomePropsExport implements FromCollection, WithProperties {
+        collection() {
+          return [["data"]];
+        }
+        properties() {
+          return {
+            description: "Only description",
+            keywords: "keyword1",
+            category: "Cat",
+            company: "Co",
+            manager: "Mgr",
+          };
+        }
+      }
+
+      const buffer = await service.raw(new SomePropsExport(), ExcelType.XLSX);
+      const wb = await readXlsx(buffer);
+      expect(wb.description).toBe("Only description");
+      expect(wb.keywords).toBe("keyword1");
+      expect(wb.category).toBe("Cat");
+      expect(wb.company).toBe("Co");
+      expect(wb.manager).toBe("Mgr");
+    });
+  });
+
+  /* ---------------------------------------------------------------- */
+  /*  Style edge cases — toArgb, empty fill, empty border, bad keys    */
+  /* ---------------------------------------------------------------- */
+
+  describe("WithStyles — edge cases", () => {
+    it("should handle 8-char ARGB color (no FF prefix needed)", async () => {
+      class ArgbExport implements FromCollection, WithStyles {
+        collection() {
+          return [["data"]];
+        }
+        styles() {
+          return {
+            A1: { font: { color: "FF112233" } },
+          };
+        }
+      }
+
+      const buffer = await service.raw(new ArgbExport(), ExcelType.XLSX);
+      const wb = await readXlsx(buffer);
+      const cell = wb.worksheets[0].getCell("A1");
+      expect(cell.font.color?.argb).toBe("FF112233");
+    });
+
+    it("should handle fill without fgColor or bgColor", async () => {
+      class EmptyFillExport implements FromCollection, WithStyles {
+        collection() {
+          return [["data"]];
+        }
+        styles() {
+          return {
+            A1: {
+              fill: { type: "pattern" as const, pattern: "none" as const },
+            },
+          };
+        }
+      }
+
+      const buffer = await service.raw(new EmptyFillExport(), ExcelType.XLSX);
+      const wb = await readXlsx(buffer);
+      expect(wb.worksheets).toHaveLength(1);
+    });
+
+    it("should handle border side with no style or color", async () => {
+      class EmptyBorderExport implements FromCollection, WithStyles {
+        collection() {
+          return [["data"]];
+        }
+        styles() {
+          return {
+            A1: {
+              border: {
+                top: {},
+              },
+            },
+          };
+        }
+      }
+
+      const buffer = await service.raw(
+        new EmptyBorderExport(),
+        ExcelType.XLSX,
+      );
+      const wb = await readXlsx(buffer);
+      expect(wb.worksheets).toHaveLength(1);
+    });
+
+    it("should silently ignore unrecognised style keys", async () => {
+      class BadKeyExport implements FromCollection, WithStyles {
+        collection() {
+          return [["data"]];
+        }
+        styles() {
+          return {
+            "!!!invalid!!!": { font: { bold: true } },
+          };
+        }
+      }
+
+      const buffer = await service.raw(new BadKeyExport(), ExcelType.XLSX);
+      const wb = await readXlsx(buffer);
+      expect(sheetToArray(wb)[0]).toEqual(["data"]);
+    });
+  });
+
+  /* ---------------------------------------------------------------- */
+  /*  FromCollection without mapping — array items                     */
+  /* ---------------------------------------------------------------- */
+
+  describe("FromCollection — array items without mapping", () => {
+    it("should pass array items through directly", async () => {
+      class ArrayItemsExport implements FromCollection {
+        collection() {
+          return [
+            [1, "a"],
+            [2, "b"],
+          ];
+        }
+      }
+
+      const buffer = await service.raw(
+        new ArrayItemsExport(),
+        ExcelType.XLSX,
+      );
+      const wb = await readXlsx(buffer);
+      expect(sheetToArray(wb)).toEqual([
+        [1, "a"],
+        [2, "b"],
+      ]);
+    });
+  });
+
+  /* ---------------------------------------------------------------- */
+  /*  Module-level CSV defaults                                        */
+  /* ---------------------------------------------------------------- */
+
+  describe("module-level CSV defaults", () => {
+    it("should use global CSV settings from module options", async () => {
+      const svc = await createService({
+        csv: { delimiter: "|" },
+      });
+
+      class SimpleExport implements FromCollection {
+        collection() {
+          return [["a", "b"]];
+        }
+      }
+
+      const buffer = await svc.raw(new SimpleExport(), ExcelType.CSV);
+      const text = buffer.toString("utf-8");
+      expect(text).toContain("|");
+    });
+  });
+
+  /* ---------------------------------------------------------------- */
+  /*  defaultType fallback                                             */
+  /* ---------------------------------------------------------------- */
+
+  describe("defaultType option", () => {
+    it("should use defaultType when extension is unknown", async () => {
+      const svc = await createService({ defaultType: "csv" });
+
+      class SimpleExport implements FromCollection {
+        collection() {
+          return [["val"]];
+        }
+      }
+
+      const result = await svc.download(new SimpleExport(), "report.unknown");
+      expect(result.contentType).toBe("text/csv");
     });
   });
 });
