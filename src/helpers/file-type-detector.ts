@@ -48,3 +48,23 @@ export function columnLetterToNumber(letter: string): number {
   }
   return num;
 }
+
+/**
+ * Convert a 1-based column number to a column letter (`1` → `'A'`,
+ * `27` → `'AA'`).
+ */
+export function numberToColumnLetter(num: number): string {
+  if (!Number.isInteger(num) || num < 1) {
+    throw new Error(
+      `Invalid column number: ${num}. Must be a positive integer.`,
+    );
+  }
+  let result = "";
+  let n = num;
+  while (n > 0) {
+    const remainder = (n - 1) % 26;
+    result = String.fromCharCode(65 + remainder) + result;
+    n = Math.floor((n - 1) / 26);
+  }
+  return result;
+}

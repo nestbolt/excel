@@ -1,10 +1,18 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { Test, TestingModule } from "@nestjs/testing";
 import { Workbook } from "exceljs";
+import * as fs from "fs";
+import * as os from "os";
+import * as path from "path";
 import { ExcelService } from "../src/excel.service";
 import { ExcelModule } from "../src/excel.module";
 import { EXCEL_OPTIONS, ExcelType } from "../src/excel.constants";
-import { detectType, parseCellRef, columnLetterToNumber } from "../src/helpers";
+import {
+  detectType,
+  parseCellRef,
+  columnLetterToNumber,
+  numberToColumnLetter,
+} from "../src/helpers";
 import type {
   FromCollection,
   FromArray,
@@ -20,10 +28,16 @@ import type {
   WithCsvSettings,
   WithEvents,
   WithCustomStartCell,
+  WithAutoFilter,
+  WithFrozenRows,
+  WithFrozenColumns,
+  FromTemplate,
+  WithTemplateData,
   BeforeExportEventPayload,
   AfterSheetEventPayload,
 } from "../src/concerns";
 import { ExcelExportEvent } from "../src/concerns";
+import { createTestTemplate } from "./fixtures/create-template";
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                            */
@@ -1324,6 +1338,533 @@ describe("ExcelService", () => {
 
       const result = await svc.download(new SimpleExport(), "report.unknown");
       expect(result.contentType).toBe("text/csv");
+    });
+  });
+
+  /* ---------------------------------------------------------------- */
+  /*  numberToColumnLetter helper                                      */
+  /* ---------------------------------------------------------------- */
+
+  describe("numberToColumnLetter helper", () => {
+    it("should convert numbers to column letters", () => {
+      expect(numberToColumnLetter(1)).toBe("A");
+      expect(numberToColumnLetter(26)).toBe("Z");
+      expect(numberToColumnLetter(27)).toBe("AA");
+      expect(numberToColumnLetter(52)).toBe("AZ");
+      expect(numberToColumnLetter(703)).toBe("AAA");
+    });
+
+    it("should throw for invalid input", () => {
+      expect(() => numberToColumnLetter(0)).toThrow("Invalid column number");
+      expect(() => numberToColumnLetter(-1)).toThrow("Invalid column number");
+      expect(() => numberToColumnLetter(1.5)).toThrow("Invalid column number");
+    });
+  });
+
+  /* ---------------------------------------------------------------- */
+  /*  WithAutoFilter                                                   */
+  /* ---------------------------------------------------------------- */
+
+  describe("WithAutoFilter", () => {
+    it("should set auto-filter with explicit range", async () => {
+      class FilterExport
+        implements FromCollection, WithHeadings, WithAutoFilter
+      {
+        collection() {
+          return [
+            [1, "Alice", "alice@test.com"],
+            [2, "Bob", "bob@test.com"],
+          ];
+        }
+        headings() {
+          return ["ID", "Name", "Email"];
+        }
+        autoFilter() {
+          return "A1:C1";
+        }
+      }
+
+      const buffer = await service.raw(new FilterExport(), ExcelType.XLSX);
+      const wb = await readXlsx(buffer);
+      expect(wb.worksheets[0].autoFilter).toBe("A1:C1");
+    });
+
+    it("should auto-detect filter range from headings", async () => {
+      class AutoFilterExport
+        implements FromCollection, WithHeadings, WithAutoFilter
+      {
+        collection() {
+          return [[1, "Alice", "alice@test.com", "active"]];
+        }
+        headings() {
+          return ["ID", "Name", "Email", "Status"];
+        }
+        autoFilter() {
+          return "auto";
+        }
+      }
+
+      const buffer = await service.raw(new AutoFilterExport(), ExcelType.XLSX);
+      const wb = await readXlsx(buffer);
+      expect(wb.worksheets[0].autoFilter).toBe("A1:D1");
+    });
+
+    it("should handle auto-filter with custom start cell", async () => {
+      class OffsetFilterExport
+        implements
+          FromCollection,
+          WithHeadings,
+          WithAutoFilter,
+          WithCustomStartCell
+      {
+        collection() {
+          return [[1, "Alice"]];
+        }
+        headings() {
+          return ["ID", "Name"];
+        }
+        autoFilter() {
+          return "auto";
+        }
+        startCell() {
+          return "C3";
+        }
+      }
+
+      const buffer = await service.raw(
+        new OffsetFilterExport(),
+        ExcelType.XLSX,
+      );
+      const wb = await readXlsx(buffer);
+      expect(wb.worksheets[0].autoFilter).toBe("C3:D3");
+    });
+
+    it("should place auto-filter on last heading row when multi-row headings", async () => {
+      class MultiHeadingFilter
+        implements FromCollection, WithHeadings, WithAutoFilter
+      {
+        collection() {
+          return [[1, "Alice", "alice@test.com"]];
+        }
+        headings() {
+          return [
+            ["Group A", "", ""],
+            ["ID", "Name", "Email"],
+          ];
+        }
+        autoFilter() {
+          return "auto";
+        }
+      }
+
+      const buffer = await service.raw(
+        new MultiHeadingFilter(),
+        ExcelType.XLSX,
+      );
+      const wb = await readXlsx(buffer);
+      // Should be on row 2 (the last heading row), not row 1
+      expect(wb.worksheets[0].autoFilter).toBe("A2:C2");
+    });
+
+    it("should not set auto-filter when auto mode and no headings", async () => {
+      class NoHeadingsFilter implements FromCollection, WithAutoFilter {
+        collection() {
+          return [[1, 2]];
+        }
+        autoFilter() {
+          return "auto";
+        }
+      }
+
+      const buffer = await service.raw(
+        new NoHeadingsFilter(),
+        ExcelType.XLSX,
+      );
+      const wb = await readXlsx(buffer);
+      // autoFilter should not be set (no headings to detect from)
+      expect(wb.worksheets[0].autoFilter).toBeUndefined();
+    });
+  });
+
+  /* ---------------------------------------------------------------- */
+  /*  WithFrozenRows / WithFrozenColumns                               */
+  /* ---------------------------------------------------------------- */
+
+  describe("WithFrozenRows", () => {
+    it("should freeze the heading row", async () => {
+      class FrozenExport
+        implements FromCollection, WithHeadings, WithFrozenRows
+      {
+        collection() {
+          return [[1, "Alice"]];
+        }
+        headings() {
+          return ["ID", "Name"];
+        }
+        frozenRows() {
+          return 1;
+        }
+      }
+
+      const buffer = await service.raw(new FrozenExport(), ExcelType.XLSX);
+      const wb = await readXlsx(buffer);
+      const views = wb.worksheets[0].views;
+      expect(views).toHaveLength(1);
+      expect(views[0].state).toBe("frozen");
+      expect(views[0].ySplit).toBe(1);
+      expect(views[0].xSplit).toBe(0);
+    });
+  });
+
+  describe("WithFrozenColumns", () => {
+    it("should freeze columns", async () => {
+      class FrozenColExport implements FromCollection, WithFrozenColumns {
+        collection() {
+          return [[1, "Alice", "alice@test.com"]];
+        }
+        frozenColumns() {
+          return 2;
+        }
+      }
+
+      const buffer = await service.raw(new FrozenColExport(), ExcelType.XLSX);
+      const wb = await readXlsx(buffer);
+      const views = wb.worksheets[0].views;
+      expect(views).toHaveLength(1);
+      expect(views[0].state).toBe("frozen");
+      expect(views[0].xSplit).toBe(2);
+      expect(views[0].ySplit).toBe(0);
+    });
+  });
+
+  describe("WithFrozenRows + WithFrozenColumns", () => {
+    it("should freeze both rows and columns", async () => {
+      class FrozenBothExport
+        implements FromCollection, WithFrozenRows, WithFrozenColumns
+      {
+        collection() {
+          return [[1, "Alice"]];
+        }
+        frozenRows() {
+          return 2;
+        }
+        frozenColumns() {
+          return 1;
+        }
+      }
+
+      const buffer = await service.raw(new FrozenBothExport(), ExcelType.XLSX);
+      const wb = await readXlsx(buffer);
+      const views = wb.worksheets[0].views;
+      expect(views[0].state).toBe("frozen");
+      expect(views[0].ySplit).toBe(2);
+      expect(views[0].xSplit).toBe(1);
+    });
+  });
+
+  /* ---------------------------------------------------------------- */
+  /*  FromTemplate                                                     */
+  /* ---------------------------------------------------------------- */
+
+  describe("FromTemplate", () => {
+    let tmpDir: string;
+    let templatePath: string;
+
+    beforeEach(async () => {
+      tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "excel-tpl-"));
+      templatePath = path.join(tmpDir, "template.xlsx");
+      await createTestTemplate(templatePath);
+    });
+
+    it("should replace placeholders in template", async () => {
+      class InvoiceExport implements FromTemplate {
+        templatePath() {
+          return templatePath;
+        }
+        bindings() {
+          return {
+            "{{company}}": "Acme Inc",
+            "{{date}}": "2026-03-25",
+            "{{total}}": 1500,
+          };
+        }
+      }
+
+      const buffer = await service.raw(new InvoiceExport(), ExcelType.XLSX);
+      const wb = await readXlsx(buffer);
+      const ws = wb.worksheets[0];
+
+      expect(ws.getCell("B1").value).toBe("Acme Inc");
+      expect(ws.getCell("B2").value).toBe("2026-03-25");
+      expect(ws.getCell("B3").value).toBe(1500);
+    });
+
+    it("should insert repeating row data with WithTemplateData", async () => {
+      class InvoiceWithItems implements FromTemplate, WithTemplateData {
+        templatePath() {
+          return templatePath;
+        }
+        bindings() {
+          return {
+            "{{company}}": "TestCo",
+            "{{date}}": "2026-01-01",
+            "{{total}}": 300,
+          };
+        }
+        dataStartCell() {
+          return "A6";
+        }
+        templateData() {
+          return [
+            ["Widget", 2, 100],
+            ["Gadget", 1, 200],
+          ];
+        }
+      }
+
+      const buffer = await service.raw(
+        new InvoiceWithItems(),
+        ExcelType.XLSX,
+      );
+      const wb = await readXlsx(buffer);
+      const ws = wb.worksheets[0];
+
+      expect(ws.getCell("B1").value).toBe("TestCo");
+      expect(ws.getCell("A6").value).toBe("Widget");
+      expect(ws.getCell("B6").value).toBe(2);
+      expect(ws.getCell("C6").value).toBe(100);
+      expect(ws.getCell("A7").value).toBe("Gadget");
+    });
+
+    it("should preserve template formatting", async () => {
+      class SimpleTemplate implements FromTemplate {
+        templatePath() {
+          return templatePath;
+        }
+        bindings() {
+          return { "{{company}}": "Test" };
+        }
+      }
+
+      const buffer = await service.raw(new SimpleTemplate(), ExcelType.XLSX);
+      const wb = await readXlsx(buffer);
+      const ws = wb.worksheets[0];
+
+      // Row 5 was styled bold in the template
+      expect(ws.getRow(5).font?.bold).toBe(true);
+      // Template labels should remain
+      expect(ws.getCell("A1").value).toBe("Company:");
+      expect(ws.getCell("A5").value).toBe("Item");
+    });
+
+    it("should throw when template file does not exist", async () => {
+      class MissingTemplate implements FromTemplate {
+        templatePath() {
+          return "/nonexistent/template.xlsx";
+        }
+        bindings() {
+          return {};
+        }
+      }
+
+      await expect(
+        service.raw(new MissingTemplate(), ExcelType.XLSX),
+      ).rejects.toThrow("Template file not found");
+    });
+
+    it("should support async templateData()", async () => {
+      class AsyncTemplateData implements FromTemplate, WithTemplateData {
+        templatePath() {
+          return templatePath;
+        }
+        bindings() {
+          return { "{{company}}": "Async Co" };
+        }
+        dataStartCell() {
+          return "A6";
+        }
+        async templateData() {
+          return [["AsyncItem", 5, 50]];
+        }
+      }
+
+      const buffer = await service.raw(
+        new AsyncTemplateData(),
+        ExcelType.XLSX,
+      );
+      const wb = await readXlsx(buffer);
+      expect(wb.worksheets[0].getCell("A6").value).toBe("AsyncItem");
+    });
+
+    it("should combine FromTemplate with WithProperties", async () => {
+      class TemplateWithProps implements FromTemplate, WithProperties {
+        templatePath() {
+          return templatePath;
+        }
+        bindings() {
+          return { "{{company}}": "PropsCo" };
+        }
+        properties() {
+          return {
+            creator: "TemplateApp",
+            title: "Template Report",
+            subject: "Templating",
+            lastModifiedBy: "Admin",
+            description: "Test",
+            keywords: "kw",
+            category: "Cat",
+            company: "Co",
+            manager: "Mgr",
+          };
+        }
+      }
+
+      const buffer = await service.raw(
+        new TemplateWithProps(),
+        ExcelType.XLSX,
+      );
+      const wb = await readXlsx(buffer);
+      expect(wb.creator).toBe("TemplateApp");
+      expect(wb.title).toBe("Template Report");
+      expect(wb.worksheets[0].getCell("B1").value).toBe("PropsCo");
+    });
+
+    it("should export template as CSV", async () => {
+      class TemplateCsv implements FromTemplate {
+        templatePath() {
+          return templatePath;
+        }
+        bindings() {
+          return {
+            "{{company}}": "CsvCo",
+            "{{date}}": "2026-01-01",
+            "{{total}}": 999,
+          };
+        }
+      }
+
+      const buffer = await service.raw(new TemplateCsv(), ExcelType.CSV);
+      const text = buffer.toString("utf-8");
+      expect(text).toContain("CsvCo");
+      expect(text).toContain("999");
+    });
+
+    it("should replace placeholders embedded in longer strings", async () => {
+      // Create a template with embedded placeholder
+      const embeddedPath = path.join(tmpDir, "embedded.xlsx");
+      const ewb = new Workbook();
+      const ews = ewb.addWorksheet("Sheet1");
+      ews.getCell("A1").value = "Invoice for {{company}} - {{date}}";
+      ews.getCell("A2").value = "simple";
+      await ewb.xlsx.writeFile(embeddedPath);
+
+      class EmbeddedExport implements FromTemplate {
+        templatePath() {
+          return embeddedPath;
+        }
+        bindings() {
+          return {
+            "{{company}}": "Acme",
+            "{{date}}": "2026-03-25",
+          };
+        }
+      }
+
+      const buffer = await service.raw(new EmbeddedExport(), ExcelType.XLSX);
+      const wb = await readXlsx(buffer);
+      expect(wb.worksheets[0].getCell("A1").value).toBe(
+        "Invoice for Acme - 2026-03-25",
+      );
+      // Non-placeholder cell should be unchanged
+      expect(wb.worksheets[0].getCell("A2").value).toBe("simple");
+    });
+
+    it("should export template as CSV with BOM", async () => {
+      class TemplateCsvBom implements FromTemplate, WithCsvSettings {
+        templatePath() {
+          return templatePath;
+        }
+        bindings() {
+          return { "{{company}}": "BomCo" };
+        }
+        csvSettings() {
+          return { useBom: true };
+        }
+      }
+
+      const buffer = await service.raw(new TemplateCsvBom(), ExcelType.CSV);
+      expect(buffer[0]).toBe(0xef);
+      expect(buffer[1]).toBe(0xbb);
+      expect(buffer[2]).toBe(0xbf);
+      const text = buffer.toString("utf-8").replace(/^\uFEFF/, "");
+      expect(text).toContain("BomCo");
+    });
+
+    it("should handle template with partial binding replacement", async () => {
+      class PartialBindings implements FromTemplate {
+        templatePath() {
+          return templatePath;
+        }
+        bindings() {
+          return { "{{company}}": "Only Company" };
+          // {{date}} and {{total}} are NOT replaced
+        }
+      }
+
+      const buffer = await service.raw(
+        new PartialBindings(),
+        ExcelType.XLSX,
+      );
+      const wb = await readXlsx(buffer);
+      const ws = wb.worksheets[0];
+      expect(ws.getCell("B1").value).toBe("Only Company");
+      // Unreplaced placeholders remain as-is
+      expect(ws.getCell("B2").value).toBe("{{date}}");
+      expect(ws.getCell("B3").value).toBe("{{total}}");
+    });
+
+    it("should fire full event lifecycle for template exports", async () => {
+      const events: string[] = [];
+
+      class TemplateWithEvents implements FromTemplate, WithEvents {
+        templatePath() {
+          return templatePath;
+        }
+        bindings() {
+          return { "{{company}}": "EventCo" };
+        }
+        registerEvents() {
+          return {
+            [ExcelExportEvent.BEFORE_EXPORT]: () => {
+              events.push("beforeExport");
+            },
+            [ExcelExportEvent.BEFORE_SHEET]: () => {
+              events.push("beforeSheet");
+            },
+            [ExcelExportEvent.AFTER_SHEET]: () => {
+              events.push("afterSheet");
+            },
+            [ExcelExportEvent.BEFORE_WRITING]: () => {
+              events.push("beforeWriting");
+            },
+          };
+        }
+      }
+
+      await service.raw(new TemplateWithEvents(), ExcelType.XLSX);
+      expect(events).toEqual([
+        "beforeExport",
+        "beforeSheet",
+        "afterSheet",
+        "beforeWriting",
+      ]);
+    });
+
+    // cleanup
+    afterEach(() => {
+      if (fs.existsSync(tmpDir)) {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+      }
     });
   });
 });

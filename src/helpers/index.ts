@@ -1,1 +1,1 @@
-export { detectType, parseCellRef, columnLetterToNumber } from "./file-type-detector";
+export { detectType, parseCellRef, columnLetterToNumber, numberToColumnLetter } from "./file-type-detector";

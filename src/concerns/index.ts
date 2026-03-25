@@ -25,6 +25,16 @@ export {
 } from "./with-styles.interface";
 export { ShouldAutoSize } from "./should-auto-size.interface";
 
+// Auto-filter & freeze panes
+export { WithAutoFilter } from "./with-auto-filter.interface";
+export {
+  WithFrozenRows,
+  WithFrozenColumns,
+} from "./with-frozen-rows.interface";
+
+// Template
+export { FromTemplate, WithTemplateData } from "./from-template.interface";
+
 // Document properties
 export { WithProperties, ExcelProperties } from "./with-properties.interface";
 

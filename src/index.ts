@@ -38,6 +38,13 @@ export type {
 } from "./concerns";
 export type { ShouldAutoSize } from "./concerns";
 
+// Concerns — auto-filter & freeze panes
+export type { WithAutoFilter } from "./concerns";
+export type { WithFrozenRows, WithFrozenColumns } from "./concerns";
+
+// Concerns — template
+export type { FromTemplate, WithTemplateData } from "./concerns";
+
 // Concerns — properties
 export type { WithProperties, ExcelProperties } from "./concerns";
 
