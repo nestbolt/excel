@@ -60,3 +60,33 @@ export type {
   AfterSheetEventPayload,
 } from "./concerns";
 export { ExcelExportEvent } from "./concerns";
+
+// Concerns — import data receivers
+export type { ToArray } from "./concerns";
+export type { ToCollection } from "./concerns";
+
+// Concerns — import row processing
+export type { WithHeadingRow } from "./concerns";
+export type { WithImportMapping } from "./concerns";
+export type { WithColumnMapping } from "./concerns";
+
+// Concerns — import validation
+export type {
+  WithValidation,
+  ValidationRules,
+  ValidationRule,
+} from "./concerns";
+export type { SkipsOnError } from "./concerns";
+export type { SkipsEmptyRows } from "./concerns";
+
+// Concerns — import limits & batching
+export type { WithLimit } from "./concerns";
+export type { WithStartRow } from "./concerns";
+export type { WithBatchInserts } from "./concerns";
+
+// Import result types
+export type {
+  ImportResult,
+  ImportValidationError,
+  FieldError,
+} from "./interfaces";

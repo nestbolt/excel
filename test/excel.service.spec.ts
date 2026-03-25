@@ -1860,6 +1860,54 @@ describe("ExcelService", () => {
       ]);
     });
 
+    it("should handle template with partial properties", async () => {
+      class PartialPropsTemplate implements FromTemplate, WithProperties {
+        templatePath() {
+          return templatePath;
+        }
+        bindings() {
+          return { "{{company}}": "TestCo" };
+        }
+        properties() {
+          return { creator: "OnlyCreator" };
+        }
+      }
+
+      const buffer = await service.raw(
+        new PartialPropsTemplate(),
+        ExcelType.XLSX,
+      );
+      const wb = await readXlsx(buffer);
+      expect(wb.creator).toBe("OnlyCreator");
+      // Other props should remain default/empty
+      expect(wb.title).toBeFalsy();
+    });
+
+    it("should skip non-string cells in template placeholder replacement", async () => {
+      const numericPath = path.join(tmpDir, "numeric-tpl.xlsx");
+      const nwb = new Workbook();
+      const nws = nwb.addWorksheet("Sheet1");
+      nws.getCell("A1").value = "{{name}}";
+      nws.getCell("B1").value = 12345; // numeric cell — not a string
+      nws.getCell("C1").value = true; // boolean cell
+      await nwb.xlsx.writeFile(numericPath);
+
+      class NumericTemplate implements FromTemplate {
+        templatePath() {
+          return numericPath;
+        }
+        bindings() {
+          return { "{{name}}": "Replaced" };
+        }
+      }
+
+      const buffer = await service.raw(new NumericTemplate(), ExcelType.XLSX);
+      const wb = await readXlsx(buffer);
+      expect(wb.worksheets[0].getCell("A1").value).toBe("Replaced");
+      expect(wb.worksheets[0].getCell("B1").value).toBe(12345);
+      expect(wb.worksheets[0].getCell("C1").value).toBe(true);
+    });
+
     // cleanup
     afterEach(() => {
       if (fs.existsSync(tmpDir)) {
