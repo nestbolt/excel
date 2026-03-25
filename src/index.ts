@@ -90,3 +90,10 @@ export type {
   ImportValidationError,
   FieldError,
 } from "./interfaces";
+
+// Decorators — entity-based export
+export { Exportable } from "./decorators";
+export { ExportColumn } from "./decorators";
+export { ExportIgnore } from "./decorators";
+export { buildExportFromEntity } from "./decorators";
+export type { ExportableOptions, ExportColumnOptions } from "./decorators";

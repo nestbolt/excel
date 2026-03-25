@@ -12,22 +12,28 @@
 
 <hr>
 
-This package provides a **clean, concern-based export API** for [NestJS](https://nestjs.com) that makes generating XLSX and CSV files effortless.
+This package provides a **clean, decorator-based export API** for [NestJS](https://nestjs.com) that makes generating XLSX and CSV files effortless.
 
 Once installed, using it is as simple as:
 
 ```typescript
-class UsersExport implements FromCollection, WithHeadings {
-  collection() {
-    return this.users;
-  }
-  headings() {
-    return ["ID", "Name", "Email"];
-  }
+@Exportable({ title: "Users" })
+class UserEntity {
+  @ExportColumn({ order: 1, header: "ID" })
+  id!: number;
+
+  @ExportColumn({ order: 2 })
+  firstName!: string;
+
+  @ExportColumn({ order: 3 })
+  email!: string;
+
+  @ExportIgnore()
+  password!: string;
 }
 
 // In your controller
-return this.excelService.downloadAsStream(new UsersExport(), "users.xlsx");
+return this.excelService.downloadFromEntityAsStream(UserEntity, users, "users.xlsx");
 ```
 
 ## Table of Contents
@@ -37,7 +43,13 @@ return this.excelService.downloadAsStream(new UsersExport(), "users.xlsx");
 - [Module Configuration](#module-configuration)
   - [Static Configuration (forRoot)](#static-configuration-forroot)
   - [Async Configuration (forRootAsync)](#async-configuration-forrootasync)
-- [Exports](#exports)
+- [Exports — Decorator API](#exports--decorator-api)
+  - [@Exportable](#exportable)
+  - [@ExportColumn](#exportcolumn)
+  - [@ExportIgnore](#exportignore)
+  - [Decorator Options](#decorator-options)
+  - [Inheritance](#inheritance)
+- [Exports — Concern-based API](#exports--concern-based-api)
   - [FromCollection](#fromcollection)
   - [FromArray](#fromarray)
   - [WithHeadings](#withheadings)
@@ -120,21 +132,24 @@ import { ExcelModule } from "@nestbolt/excel";
 export class AppModule {}
 ```
 
-### 2. Create an export class
+### 2. Decorate your entity or DTO
 
 ```typescript
-import { FromCollection, WithHeadings } from "@nestbolt/excel";
+import { Exportable, ExportColumn, ExportIgnore } from "@nestbolt/excel";
 
-export class UsersExport implements FromCollection, WithHeadings {
-  constructor(private readonly users: any[]) {}
+@Exportable({ title: "Users" })
+export class UserEntity {
+  @ExportColumn({ order: 1, header: "ID" })
+  id!: number;
 
-  collection() {
-    return this.users;
-  }
+  @ExportColumn({ order: 2 })
+  firstName!: string;
 
-  headings() {
-    return ["ID", "Name", "Email"];
-  }
+  @ExportColumn({ order: 3 })
+  email!: string;
+
+  @ExportIgnore()
+  password!: string;
 }
 ```
 
@@ -143,7 +158,7 @@ export class UsersExport implements FromCollection, WithHeadings {
 ```typescript
 import { Controller, Get } from "@nestjs/common";
 import { ExcelService } from "@nestbolt/excel";
-import { UsersExport } from "./users.export";
+import { UserEntity } from "./user.entity";
 
 @Controller("users")
 export class UsersController {
@@ -151,17 +166,20 @@ export class UsersController {
 
   @Get("export")
   async export() {
-    const users = [
-      { id: 1, name: "Alice", email: "alice@example.com" },
-      { id: 2, name: "Bob", email: "bob@example.com" },
+    const users: UserEntity[] = [
+      { id: 1, firstName: "Alice", email: "alice@example.com", password: "s" },
+      { id: 2, firstName: "Bob", email: "bob@example.com", password: "s" },
     ];
-    return this.excelService.downloadAsStream(
-      new UsersExport(users),
+    return this.excelService.downloadFromEntityAsStream(
+      UserEntity,
+      users,
       "users.xlsx",
     );
   }
 }
 ```
+
+The `password` field is automatically excluded from the export thanks to `@ExportIgnore()`.
 
 ## Module Configuration
 
@@ -191,9 +209,117 @@ ExcelModule.forRootAsync({
 
 The module is registered as **global** — import it once in your root module.
 
-## Exports
+## Exports — Decorator API
 
-Export classes use a **concern-based** pattern. Implement one or more interfaces to opt in to features.
+The recommended way to define exports. Decorate your existing entities or DTOs — no separate export class needed.
+
+### @Exportable
+
+Mark a class as exportable. Accepts optional configuration:
+
+```typescript
+@Exportable({
+  title: "Users",           // worksheet tab name
+  autoFilter: "auto",       // add auto-filter to headings
+  autoSize: true,           // auto-size columns to fit content
+  frozenRows: 1,            // freeze heading row
+  frozenColumns: 1,         // freeze first column
+  columnWidths: { A: 10 },  // explicit column widths
+})
+class UserEntity { /* ... */ }
+```
+
+### @ExportColumn
+
+Mark a property for export. Without options, the column header is derived from the property name (camelCase → Title Case).
+
+```typescript
+@Exportable()
+class ProductEntity {
+  @ExportColumn({ order: 1, header: "SKU", width: 15 })
+  sku!: string;
+
+  @ExportColumn({ order: 2, format: "#,##0.00" })
+  price!: number;
+
+  @ExportColumn({
+    order: 3,
+    header: "In Stock",
+    map: (val) => (val ? "Yes" : "No"),
+  })
+  inStock!: boolean;
+}
+```
+
+**Options:**
+
+| Option   | Type                         | Description                                        |
+| -------- | ---------------------------- | -------------------------------------------------- |
+| `order`  | `number`                     | Column position (lower = further left)             |
+| `header` | `string`                     | Column heading text                                |
+| `format` | `string`                     | Excel number format (e.g. `'#,##0.00'`)            |
+| `map`    | `(value, row) => any`        | Transform the value before writing                 |
+| `width`  | `number`                     | Column width in character units                    |
+
+### @ExportIgnore
+
+Exclude a property from the export.
+
+```typescript
+@Exportable()
+class UserEntity {
+  @ExportColumn() name!: string;
+  @ExportColumn() email!: string;
+  @ExportIgnore() password!: string;  // excluded
+}
+```
+
+### Decorator Options
+
+All `@Exportable()` options map to the same concern-based features:
+
+| Option          | Equivalent Concern   |
+| --------------- | -------------------- |
+| `title`         | `WithTitle`          |
+| `columnWidths`  | `WithColumnWidths`   |
+| `autoFilter`    | `WithAutoFilter`     |
+| `autoSize`      | `ShouldAutoSize`     |
+| `frozenRows`    | `WithFrozenRows`     |
+| `frozenColumns` | `WithFrozenColumns`  |
+
+### Inheritance
+
+Decorators support class inheritance. Child classes inherit parent columns and can override or ignore them:
+
+```typescript
+@Exportable({ title: "Base" })
+class BaseEntity {
+  @ExportColumn({ order: 1 }) id!: number;
+  @ExportColumn({ order: 2 }) name!: string;
+}
+
+@Exportable({ title: "Employees" })
+class EmployeeEntity extends BaseEntity {
+  @ExportColumn({ order: 3 }) department!: string;
+  @ExportIgnore() name!: string;  // remove name from export
+}
+// Columns: ID, Department
+```
+
+### Service Methods (Decorator API)
+
+| Method                                                    | Returns               | Description                          |
+| --------------------------------------------------------- | --------------------- | ------------------------------------ |
+| `downloadFromEntity(entityClass, data, filename, type?)`  | `ExcelDownloadResult` | Buffer + filename + content type     |
+| `downloadFromEntityAsStream(entityClass, data, filename, type?)` | `StreamableFile` | NestJS StreamableFile for controllers |
+| `storeFromEntity(entityClass, data, filePath, type?)`     | `void`                | Write to a local file                |
+| `rawFromEntity(entityClass, data, type)`                  | `Buffer`              | Raw file buffer                      |
+
+---
+
+## Exports — Concern-based API
+
+For advanced use cases (multiple sheets, templates, events, custom start cells, CSV settings), use the concern-based pattern. Implement one or more interfaces to opt in to features.
 
 ### FromCollection
 
@@ -696,7 +822,7 @@ class TolerantImport implements WithValidation, SkipsOnError {
 
 Inject `ExcelService` and call its methods:
 
-### Export Methods
+### Export Methods (Concern-based)
 
 | Method                                          | Returns               | Description                                                  |
 | ----------------------------------------------- | --------------------- | ------------------------------------------------------------ |
@@ -704,6 +830,15 @@ Inject `ExcelService` and call its methods:
 | `downloadAsStream(exportable, filename, type?)` | `StreamableFile`      | Returns a NestJS StreamableFile for direct controller return |
 | `store(exportable, filePath, type?)`            | `void`                | Writes the export to a local file                            |
 | `raw(exportable, type)`                         | `Buffer`              | Returns the raw file buffer                                  |
+
+### Export Methods (Decorator-based)
+
+| Method                                                    | Returns               | Description                          |
+| --------------------------------------------------------- | --------------------- | ------------------------------------ |
+| `downloadFromEntity(entityClass, data, filename, type?)`  | `ExcelDownloadResult` | Buffer + filename + content type     |
+| `downloadFromEntityAsStream(entityClass, data, filename, type?)` | `StreamableFile` | NestJS StreamableFile for controllers |
+| `storeFromEntity(entityClass, data, filePath, type?)`     | `void`                | Write to a local file                |
+| `rawFromEntity(entityClass, data, type)`                  | `Buffer`              | Raw file buffer                      |
 
 ### Import Methods
 

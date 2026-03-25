@@ -2,6 +2,17 @@
 
 All notable changes to `@nestbolt/excel` will be documented in this file.
 
+## Unreleased
+
+### Export Decorators
+
+- **@Exportable()** — Class decorator to mark entities/DTOs as exportable with optional title, auto-filter, auto-size, frozen rows/columns, and column widths
+- **@ExportColumn()** — Property decorator to configure column order, header, format, width, and value mapping
+- **@ExportIgnore()** — Property decorator to exclude a property from the export
+- **buildExportFromEntity()** — Reads decorator metadata and builds a concern-compatible export object
+- **ExcelService** — New entity-based methods: `downloadFromEntity()`, `downloadFromEntityAsStream()`, `storeFromEntity()`, `rawFromEntity()`
+- Full inheritance support: child classes inherit, override, or ignore parent columns
+
 ## v0.2.0 — Import XLSX/CSV with Validation
 
 ### Features
