@@ -54,6 +54,11 @@ export function columnLetterToNumber(letter: string): number {
  * `27` → `'AA'`).
  */
 export function numberToColumnLetter(num: number): string {
+  if (!Number.isInteger(num) || num < 1) {
+    throw new Error(
+      `Invalid column number: ${num}. Must be a positive integer.`,
+    );
+  }
   let result = "";
   let n = num;
   while (n > 0) {

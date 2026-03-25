@@ -157,13 +157,12 @@ export async function populateSheet(
 
   let currentRow = startRow;
   let headingColCount = 0;
-  let headingStartRow = startRow;
+  let headingEndRow = startRow;
 
   // --- headings -----------------------------------------------------
   if (isWithHeadings(exportable)) {
     const headings = exportable.headings();
     const headingRows = Array.isArray(headings[0]) ? headings : [headings];
-    headingStartRow = currentRow;
 
     for (const headingRow of headingRows as string[][]) {
       if (headingRow.length > headingColCount) {
@@ -176,6 +175,7 @@ export async function populateSheet(
       row.commit();
       currentRow++;
     }
+    headingEndRow = currentRow - 1;
   }
 
   // --- data rows ----------------------------------------------------
@@ -277,7 +277,7 @@ export async function populateSheet(
       if (headingColCount > 0) {
         const lastColLetter = numberToColumnLetter(startCol + headingColCount - 1);
         const firstColLetter = numberToColumnLetter(startCol);
-        worksheet.autoFilter = `${firstColLetter}${headingStartRow}:${lastColLetter}${headingStartRow}`;
+        worksheet.autoFilter = `${firstColLetter}${headingEndRow}:${lastColLetter}${headingEndRow}`;
       }
     } else {
       worksheet.autoFilter = filterValue;

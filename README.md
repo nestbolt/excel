@@ -52,6 +52,10 @@ return this.excelService.downloadAsStream(new UsersExport(), "users.xlsx");
   - [WithCustomStartCell](#withcustomstartcell)
   - [WithCsvSettings](#withcsvsettings)
   - [WithEvents](#withevents)
+  - [WithAutoFilter](#withautofilter)
+  - [WithFrozenRows / WithFrozenColumns](#withfrozenrows--withfrozencolumns)
+  - [FromTemplate](#fromtemplate)
+  - [WithTemplateData](#withtemplatedata)
 - [Using the Service Directly](#using-the-service-directly)
 - [Configuration Options](#configuration-options)
 - [Testing](#testing)
@@ -354,6 +358,123 @@ registerEvents() {
   };
 }
 ```
+
+### WithAutoFilter
+
+Add an auto-filter dropdown to your heading row. Use `'auto'` to automatically detect the range from your headings, or specify an explicit range.
+
+```typescript
+class UsersExport implements FromCollection, WithHeadings, WithAutoFilter {
+  collection() {
+    return this.users;
+  }
+  headings() {
+    return ["ID", "Name", "Email"];
+  }
+  autoFilter() {
+    return "auto"; // automatically covers A1:C1
+  }
+}
+```
+
+Or with an explicit range:
+
+```typescript
+autoFilter() {
+  return "A1:D10";
+}
+```
+
+### WithFrozenRows / WithFrozenColumns
+
+Freeze rows or columns so they stay visible when scrolling.
+
+```typescript
+class UsersExport implements FromCollection, WithHeadings, WithFrozenRows {
+  collection() {
+    return this.users;
+  }
+  headings() {
+    return ["ID", "Name", "Email"];
+  }
+  frozenRows() {
+    return 1; // freeze the first row (headings)
+  }
+}
+```
+
+You can freeze columns too, or combine both:
+
+```typescript
+class ReportExport
+  implements FromCollection, WithFrozenRows, WithFrozenColumns
+{
+  collection() {
+    return this.data;
+  }
+  frozenRows() {
+    return 2;
+  }
+  frozenColumns() {
+    return 1; // freeze column A
+  }
+}
+```
+
+### FromTemplate
+
+Fill an existing `.xlsx` template with data. Define placeholder bindings that replace `{{placeholder}}` patterns in the template.
+
+```typescript
+class InvoiceExport implements FromTemplate {
+  templatePath() {
+    return "/path/to/invoice-template.xlsx";
+  }
+
+  bindings() {
+    return {
+      "{{company}}": "Acme Corp",
+      "{{date}}": "2026-01-15",
+      "{{total}}": 1500,
+    };
+  }
+}
+```
+
+When a cell contains exactly one placeholder and nothing else, the binding value is written with its original type (number, date, etc.). When a placeholder is embedded in a longer string, the result is a string concatenation.
+
+### WithTemplateData
+
+Extend `FromTemplate` with repeating row data — ideal for line items in invoices, reports, etc.
+
+```typescript
+class InvoiceExport implements FromTemplate, WithTemplateData {
+  templatePath() {
+    return "/path/to/invoice-template.xlsx";
+  }
+
+  bindings() {
+    return {
+      "{{company}}": "Acme Corp",
+      "{{date}}": "2026-01-15",
+      "{{total}}": 4200,
+    };
+  }
+
+  dataStartCell() {
+    return "A6"; // row data starts at A6
+  }
+
+  async templateData() {
+    return [
+      ["Widget", 10, 42],
+      ["Gadget", 5, 840],
+    ];
+  }
+}
+```
+
+The `dataStartCell()` specifies where the first row of data is written. Each subsequent row is placed on the next row below.
 
 ## Using the Service Directly
 

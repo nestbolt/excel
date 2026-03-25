@@ -1353,6 +1353,12 @@ describe("ExcelService", () => {
       expect(numberToColumnLetter(52)).toBe("AZ");
       expect(numberToColumnLetter(703)).toBe("AAA");
     });
+
+    it("should throw for invalid input", () => {
+      expect(() => numberToColumnLetter(0)).toThrow("Invalid column number");
+      expect(() => numberToColumnLetter(-1)).toThrow("Invalid column number");
+      expect(() => numberToColumnLetter(1.5)).toThrow("Invalid column number");
+    });
   });
 
   /* ---------------------------------------------------------------- */
@@ -1431,6 +1437,33 @@ describe("ExcelService", () => {
       );
       const wb = await readXlsx(buffer);
       expect(wb.worksheets[0].autoFilter).toBe("C3:D3");
+    });
+
+    it("should place auto-filter on last heading row when multi-row headings", async () => {
+      class MultiHeadingFilter
+        implements FromCollection, WithHeadings, WithAutoFilter
+      {
+        collection() {
+          return [[1, "Alice", "alice@test.com"]];
+        }
+        headings() {
+          return [
+            ["Group A", "", ""],
+            ["ID", "Name", "Email"],
+          ];
+        }
+        autoFilter() {
+          return "auto";
+        }
+      }
+
+      const buffer = await service.raw(
+        new MultiHeadingFilter(),
+        ExcelType.XLSX,
+      );
+      const wb = await readXlsx(buffer);
+      // Should be on row 2 (the last heading row), not row 1
+      expect(wb.worksheets[0].autoFilter).toBe("A2:C2");
     });
 
     it("should not set auto-filter when auto mode and no headings", async () => {
@@ -1788,6 +1821,43 @@ describe("ExcelService", () => {
       // Unreplaced placeholders remain as-is
       expect(ws.getCell("B2").value).toBe("{{date}}");
       expect(ws.getCell("B3").value).toBe("{{total}}");
+    });
+
+    it("should fire full event lifecycle for template exports", async () => {
+      const events: string[] = [];
+
+      class TemplateWithEvents implements FromTemplate, WithEvents {
+        templatePath() {
+          return templatePath;
+        }
+        bindings() {
+          return { "{{company}}": "EventCo" };
+        }
+        registerEvents() {
+          return {
+            [ExcelExportEvent.BEFORE_EXPORT]: () => {
+              events.push("beforeExport");
+            },
+            [ExcelExportEvent.BEFORE_SHEET]: () => {
+              events.push("beforeSheet");
+            },
+            [ExcelExportEvent.AFTER_SHEET]: () => {
+              events.push("afterSheet");
+            },
+            [ExcelExportEvent.BEFORE_WRITING]: () => {
+              events.push("beforeWriting");
+            },
+          };
+        }
+      }
+
+      await service.raw(new TemplateWithEvents(), ExcelType.XLSX);
+      expect(events).toEqual([
+        "beforeExport",
+        "beforeSheet",
+        "afterSheet",
+        "beforeWriting",
+      ]);
     });
 
     // cleanup

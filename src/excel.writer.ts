@@ -201,10 +201,21 @@ async function writeTemplateExport(
   const workbook = new Workbook();
   await workbook.xlsx.readFile(templatePath);
 
+  // --- fire beforeExport --------------------------------------------
+  fireEvent(exportable, ExcelExportEvent.BEFORE_EXPORT, {
+    exportable,
+    workbook,
+  });
+
   const bindings = exportable.bindings();
 
   // --- replace placeholders in all sheets ---------------------------
   for (const worksheet of workbook.worksheets) {
+    fireEvent(exportable, ExcelExportEvent.BEFORE_SHEET, {
+      exportable,
+      worksheet,
+    });
+
     worksheet.eachRow((row) => {
       row.eachCell((cell) => {
         if (typeof cell.value === "string") {
@@ -225,6 +236,11 @@ async function writeTemplateExport(
           }
         }
       });
+    });
+
+    fireEvent(exportable, ExcelExportEvent.AFTER_SHEET, {
+      exportable,
+      worksheet,
     });
   }
 
