@@ -10,6 +10,7 @@ import type {
 import { detectType } from "./helpers";
 import { writeExport } from "./excel.writer";
 import { readImport } from "./excel.reader";
+import { buildExportFromEntity } from "./decorators";
 
 @Injectable()
 export class ExcelService {
@@ -95,6 +96,61 @@ export class ExcelService {
    */
   async raw(exportable: object, writerType: ExcelType): Promise<Buffer> {
     return writeExport(exportable, writerType, this.options);
+  }
+
+  /* ---------------------------------------------------------------- */
+  /*  Decorator-based export                                           */
+  /* ---------------------------------------------------------------- */
+
+  /**
+   * Export a decorated entity class and return a download result.
+   */
+  async downloadFromEntity<T>(
+    entityClass: new (...args: any[]) => T,
+    data: T[],
+    filename: string,
+    writerType?: ExcelType,
+  ): Promise<ExcelDownloadResult> {
+    const exportable = buildExportFromEntity(entityClass, data);
+    return this.download(exportable, filename, writerType);
+  }
+
+  /**
+   * Export a decorated entity class as a NestJS StreamableFile.
+   */
+  async downloadFromEntityAsStream<T>(
+    entityClass: new (...args: any[]) => T,
+    data: T[],
+    filename: string,
+    writerType?: ExcelType,
+  ): Promise<StreamableFile> {
+    const exportable = buildExportFromEntity(entityClass, data);
+    return this.downloadAsStream(exportable, filename, writerType);
+  }
+
+  /**
+   * Export a decorated entity class to a local file.
+   */
+  async storeFromEntity<T>(
+    entityClass: new (...args: any[]) => T,
+    data: T[],
+    filePath: string,
+    writerType?: ExcelType,
+  ): Promise<void> {
+    const exportable = buildExportFromEntity(entityClass, data);
+    return this.store(exportable, filePath, writerType);
+  }
+
+  /**
+   * Export a decorated entity class and return the raw buffer.
+   */
+  async rawFromEntity<T>(
+    entityClass: new (...args: any[]) => T,
+    data: T[],
+    writerType: ExcelType,
+  ): Promise<Buffer> {
+    const exportable = buildExportFromEntity(entityClass, data);
+    return this.raw(exportable, writerType);
   }
 
   /* ---------------------------------------------------------------- */
