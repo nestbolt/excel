@@ -57,6 +57,9 @@ export class S3Driver implements StorageDriver {
         Key: this.key(path),
       }),
     );
+    if (!response.Body) {
+      throw new Error(`S3 returned empty body for key "${this.key(path)}".`);
+    }
     const chunks: Buffer[] = [];
     for await (const chunk of response.Body) {
       chunks.push(Buffer.from(chunk));

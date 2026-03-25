@@ -32,12 +32,6 @@ describe("LocalDriver", () => {
       );
       expect(content).toBe("data");
     });
-
-    it("should handle absolute paths", async () => {
-      const absPath = path.join(tmpDir, "abs-test.txt");
-      await driver.put(absPath, Buffer.from("absolute"));
-      expect(fs.readFileSync(absPath, "utf-8")).toBe("absolute");
-    });
   });
 
   describe("get", () => {
@@ -64,6 +58,12 @@ describe("LocalDriver", () => {
     it("should not throw if file does not exist", async () => {
       await expect(driver.delete("no-such-file.txt")).resolves.not.toThrow();
     });
+
+    it("should rethrow non-ENOENT errors", async () => {
+      // Deleting a directory triggers EPERM/EISDIR, not ENOENT
+      fs.mkdirSync(path.join(tmpDir, "a-dir"));
+      await expect(driver.delete("a-dir")).rejects.toThrow();
+    });
   });
 
   describe("exists", () => {
@@ -81,6 +81,25 @@ describe("LocalDriver", () => {
     it("should use cwd as root when no config provided", () => {
       const defaultDriver = new LocalDriver();
       expect(defaultDriver).toBeDefined();
+    });
+  });
+
+  describe("path traversal protection", () => {
+    it("should reject ../ paths that escape root", () => {
+      expect(() => driver["resolve"]("../../etc/passwd")).toThrow(
+        "resolves outside the root directory",
+      );
+    });
+
+    it("should allow absolute paths as-is", async () => {
+      const absPath = path.join(tmpDir, "abs-test.txt");
+      await driver.put(absPath, Buffer.from("absolute"));
+      expect(fs.readFileSync(absPath, "utf-8")).toBe("absolute");
+    });
+
+    it("should allow paths within root", async () => {
+      await driver.put("safe/nested/file.txt", Buffer.from("ok"));
+      expect(await driver.exists("safe/nested/file.txt")).toBe(true);
     });
   });
 });

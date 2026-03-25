@@ -1,4 +1,4 @@
-import * as fs from "fs";
+import * as fs from "fs/promises";
 import * as path from "path";
 import type { StorageDriver } from "../storage-driver.interface";
 import type { LocalDiskConfig } from "../storage.types";
@@ -7,36 +7,44 @@ export class LocalDriver implements StorageDriver {
   private readonly root: string;
 
   constructor(config: LocalDiskConfig = { driver: "local" }) {
-    this.root = config.root ?? process.cwd();
+    this.root = path.resolve(config.root ?? process.cwd());
   }
 
   private resolve(filePath: string): string {
-    return path.isAbsolute(filePath)
-      ? filePath
-      : path.resolve(this.root, filePath);
+    if (path.isAbsolute(filePath)) return filePath;
+    const resolved = path.resolve(this.root, filePath);
+    if (!resolved.startsWith(this.root + path.sep) && resolved !== this.root) {
+      throw new Error(
+        `Path "${filePath}" resolves outside the root directory.`,
+      );
+    }
+    return resolved;
   }
 
   async put(filePath: string, buffer: Buffer): Promise<void> {
     const resolved = this.resolve(filePath);
-    const dir = path.dirname(resolved);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-    fs.writeFileSync(resolved, buffer);
+    await fs.mkdir(path.dirname(resolved), { recursive: true });
+    await fs.writeFile(resolved, buffer);
   }
 
   async get(filePath: string): Promise<Buffer> {
-    return fs.readFileSync(this.resolve(filePath));
+    return fs.readFile(this.resolve(filePath));
   }
 
   async delete(filePath: string): Promise<void> {
-    const resolved = this.resolve(filePath);
-    if (fs.existsSync(resolved)) {
-      fs.unlinkSync(resolved);
+    try {
+      await fs.unlink(this.resolve(filePath));
+    } catch (err: any) {
+      if (err.code !== "ENOENT") throw err;
     }
   }
 
   async exists(filePath: string): Promise<boolean> {
-    return fs.existsSync(this.resolve(filePath));
+    try {
+      await fs.access(this.resolve(filePath));
+      return true;
+    } catch {
+      return false;
+    }
   }
 }

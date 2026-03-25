@@ -99,6 +99,12 @@ describe("S3Driver", () => {
       const result = await driver.get("file.xlsx");
       expect(result.toString()).toBe("chunk1chunk2");
     });
+
+    it("should throw when response body is empty", async () => {
+      mockSend.mockResolvedValue({ Body: null });
+      const driver = createDriver();
+      await expect(driver.get("file.xlsx")).rejects.toThrow("empty body");
+    });
   });
 
   describe("delete", () => {

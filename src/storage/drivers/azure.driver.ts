@@ -75,6 +75,9 @@ export class AzureDriver implements StorageDriver {
   async get(path: string): Promise<Buffer> {
     const blobClient = this.containerClient.getBlockBlobClient(this.key(path));
     const response = await blobClient.download(0);
+    if (!response.readableStreamBody) {
+      throw new Error(`Azure returned empty body for blob "${this.key(path)}".`);
+    }
     const chunks: Buffer[] = [];
     for await (const chunk of response.readableStreamBody) {
       chunks.push(Buffer.from(chunk));
