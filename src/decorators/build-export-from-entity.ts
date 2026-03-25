@@ -42,7 +42,6 @@ function collectColumns(entityClass: Function): ResolvedColumn[] {
   }
 
   const merged = new Map<string, ExportColumnOptions>();
-  const ignored = new Set<string>();
 
   for (const ctor of chain) {
     const cols: Map<string, ExportColumnOptions> | undefined =
@@ -50,7 +49,6 @@ function collectColumns(entityClass: Function): ResolvedColumn[] {
     if (cols) {
       for (const [key, opts] of cols) {
         merged.set(key, opts);
-        ignored.delete(key);
       }
     }
 
@@ -58,7 +56,6 @@ function collectColumns(entityClass: Function): ResolvedColumn[] {
       Reflect.getOwnMetadata(EXPORT_IGNORE_META, ctor);
     if (ign) {
       for (const key of ign) {
-        ignored.add(key);
         merged.delete(key);
       }
     }
@@ -127,7 +124,7 @@ export function buildExportFromEntity<T>(
   data: T[],
 ): object {
   const exportableOpts: ExportableOptions | undefined =
-    Reflect.getMetadata(EXPORTABLE_META, entityClass);
+    Reflect.getOwnMetadata(EXPORTABLE_META, entityClass);
 
   if (!exportableOpts) {
     throw new Error(

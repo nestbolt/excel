@@ -1,5 +1,6 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import "reflect-metadata";
+import { Test, TestingModule } from "@nestjs/testing";
 import { Workbook } from "exceljs";
 import {
   Exportable,
@@ -9,6 +10,8 @@ import {
 } from "../src/decorators";
 import { writeExport } from "../src/excel.writer";
 import { ExcelType } from "../src/excel.constants";
+import { ExcelModule } from "../src/excel.module";
+import { ExcelService } from "../src/excel.service";
 
 /* ------------------------------------------------------------------ */
 /*  Test entities                                                      */
@@ -230,6 +233,16 @@ describe("Export Decorators", () => {
       const row = exportObj.map(data[0]);
       expect(row).toEqual([1, "value"]);
     });
+
+    it("should throw if child class does not have its own @Exportable()", () => {
+      class UndecoratedChild extends BaseEntity {
+        @ExportColumn({ order: 3 })
+        extra!: string;
+      }
+      expect(() => buildExportFromEntity(UndecoratedChild, [])).toThrow(
+        'Class "UndecoratedChild" is not decorated with @Exportable().',
+      );
+    });
   });
 
   describe("end-to-end with writeExport", () => {
@@ -286,6 +299,84 @@ describe("Export Decorators", () => {
         await writeExport(exportObj, ExcelType.CSV, {})
       ).toString("utf-8");
       expect(csv).not.toContain("secret123");
+    });
+  });
+
+  describe("ExcelService entity methods", () => {
+    let service: ExcelService;
+    let mod: TestingModule;
+
+    beforeAll(async () => {
+      mod = await Test.createTestingModule({
+        imports: [ExcelModule.forRoot()],
+      }).compile();
+      service = mod.get(ExcelService);
+    });
+
+    afterAll(async () => {
+      await mod.close();
+    });
+
+    const sampleData = [
+      { id: 1, firstName: "Alice", email: "a@b.com", password: "s" },
+    ];
+
+    it("downloadFromEntity should return buffer, filename, and contentType", async () => {
+      const result = await service.downloadFromEntity(
+        UserEntity,
+        sampleData,
+        "users.xlsx",
+      );
+      expect(result.buffer).toBeInstanceOf(Buffer);
+      expect(result.filename).toBe("users.xlsx");
+      expect(result.contentType).toBeDefined();
+    });
+
+    it("downloadFromEntity should resolve type from filename", async () => {
+      const result = await service.downloadFromEntity(
+        UserEntity,
+        sampleData,
+        "users.csv",
+      );
+      const csv = result.buffer.toString("utf-8");
+      expect(csv).toContain("Alice");
+    });
+
+    it("downloadFromEntityAsStream should return a StreamableFile", async () => {
+      const stream = await service.downloadFromEntityAsStream(
+        UserEntity,
+        sampleData,
+        "users.xlsx",
+      );
+      expect(stream).toBeDefined();
+      expect(stream.getStream).toBeDefined();
+    });
+
+    it("rawFromEntity should return a Buffer", async () => {
+      const buffer = await service.rawFromEntity(
+        UserEntity,
+        sampleData,
+        ExcelType.XLSX,
+      );
+      expect(buffer).toBeInstanceOf(Buffer);
+      const wb = await readBuffer(buffer);
+      expect(wb.getWorksheet("Users")).toBeDefined();
+    });
+
+    it("storeFromEntity should write a file", async () => {
+      const os = await import("os");
+      const path = await import("path");
+      const fs = await import("fs");
+      const filePath = path.join(os.tmpdir(), `decorator-test-${Date.now()}.xlsx`);
+      try {
+        await service.storeFromEntity(UserEntity, sampleData, filePath);
+        expect(fs.existsSync(filePath)).toBe(true);
+        const wb = new Workbook();
+        await wb.xlsx.readFile(filePath);
+        expect(wb.getWorksheet("Users")).toBeDefined();
+      } finally {
+        if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+      }
     });
   });
 });
