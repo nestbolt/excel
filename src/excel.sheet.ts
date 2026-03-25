@@ -9,12 +9,15 @@ import type {
   WithColumnFormatting,
   WithStyles,
   WithCustomStartCell,
+  WithAutoFilter,
+  WithFrozenRows,
+  WithFrozenColumns,
   CellStyle,
   FontStyle,
   FillStyle,
   BorderStyle as IBorderStyle,
 } from "./concerns";
-import { columnLetterToNumber, parseCellRef } from "./helpers";
+import { columnLetterToNumber, numberToColumnLetter, parseCellRef } from "./helpers";
 
 /* ------------------------------------------------------------------ */
 /*  Type-guard helpers                                                 */
@@ -58,6 +61,18 @@ function isShouldAutoSize(obj: any): boolean {
 
 function isWithCustomStartCell(obj: any): obj is WithCustomStartCell {
   return typeof obj.startCell === "function";
+}
+
+function isWithAutoFilter(obj: any): obj is WithAutoFilter {
+  return typeof obj.autoFilter === "function";
+}
+
+function isWithFrozenRows(obj: any): obj is WithFrozenRows {
+  return typeof obj.frozenRows === "function";
+}
+
+function isWithFrozenColumns(obj: any): obj is WithFrozenColumns {
+  return typeof obj.frozenColumns === "function";
 }
 
 /* ------------------------------------------------------------------ */
@@ -141,13 +156,19 @@ export async function populateSheet(
   }
 
   let currentRow = startRow;
+  let headingColCount = 0;
+  let headingStartRow = startRow;
 
   // --- headings -----------------------------------------------------
   if (isWithHeadings(exportable)) {
     const headings = exportable.headings();
     const headingRows = Array.isArray(headings[0]) ? headings : [headings];
+    headingStartRow = currentRow;
 
     for (const headingRow of headingRows as string[][]) {
+      if (headingRow.length > headingColCount) {
+        headingColCount = headingRow.length;
+      }
       const row = worksheet.getRow(currentRow);
       headingRow.forEach((val, idx) => {
         row.getCell(startCol + idx).value = val;
@@ -247,5 +268,37 @@ export async function populateSheet(
         Object.assign(cell, converted);
       }
     }
+  }
+
+  // --- auto-filter --------------------------------------------------
+  if (isWithAutoFilter(exportable)) {
+    const filterValue = exportable.autoFilter();
+    if (filterValue === "auto") {
+      if (headingColCount > 0) {
+        const lastColLetter = numberToColumnLetter(startCol + headingColCount - 1);
+        const firstColLetter = numberToColumnLetter(startCol);
+        worksheet.autoFilter = `${firstColLetter}${headingStartRow}:${lastColLetter}${headingStartRow}`;
+      }
+    } else {
+      worksheet.autoFilter = filterValue;
+    }
+  }
+
+  // --- frozen rows / columns ----------------------------------------
+  const frozenRowCount = isWithFrozenRows(exportable)
+    ? exportable.frozenRows()
+    : 0;
+  const frozenColCount = isWithFrozenColumns(exportable)
+    ? exportable.frozenColumns()
+    : 0;
+
+  if (frozenRowCount > 0 || frozenColCount > 0) {
+    worksheet.views = [
+      {
+        state: "frozen",
+        xSplit: frozenColCount,
+        ySplit: frozenRowCount,
+      },
+    ];
   }
 }
