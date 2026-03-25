@@ -314,12 +314,12 @@ class EmployeeEntity extends BaseEntity {
 
 ### Service Methods (Decorator API)
 
-| Method                                                    | Returns               | Description                          |
-| --------------------------------------------------------- | --------------------- | ------------------------------------ |
-| `downloadFromEntity(entityClass, data, filename, type?)`  | `ExcelDownloadResult` | Buffer + filename + content type     |
-| `downloadFromEntityAsStream(entityClass, data, filename, type?)` | `StreamableFile` | NestJS StreamableFile for controllers |
-| `storeFromEntity(entityClass, data, filePath, type?)`     | `void`                | Write to a local file                |
-| `rawFromEntity(entityClass, data, type)`                  | `Buffer`              | Raw file buffer                      |
+| Method                                                              | Returns               | Description                          |
+| ------------------------------------------------------------------- | --------------------- | ------------------------------------ |
+| `downloadFromEntity(entityClass, data, filename, type?)`            | `ExcelDownloadResult` | Buffer + filename + content type     |
+| `downloadFromEntityAsStream(entityClass, data, filename, type?)`    | `StreamableFile`      | NestJS StreamableFile for controllers |
+| `storeFromEntity(entityClass, data, filePath, type?, disk?)`        | `void`                | Write to storage (default or named disk) |
+| `rawFromEntity(entityClass, data, type)`                            | `Buffer`              | Raw file buffer                      |
 
 ---
 
@@ -980,42 +980,44 @@ Inject `ExcelService` and call its methods:
 
 ### Export Methods (Concern-based)
 
-| Method                                          | Returns               | Description                                                  |
-| ----------------------------------------------- | --------------------- | ------------------------------------------------------------ |
-| `download(exportable, filename, type?)`         | `ExcelDownloadResult` | Returns buffer + filename + content type                     |
-| `downloadAsStream(exportable, filename, type?)` | `StreamableFile`      | Returns a NestJS StreamableFile for direct controller return |
-| `store(exportable, filePath, type?)`            | `void`                | Writes the export to a local file                            |
-| `raw(exportable, type)`                         | `Buffer`              | Returns the raw file buffer                                  |
+| Method                                                | Returns               | Description                                                  |
+| ----------------------------------------------------- | --------------------- | ------------------------------------------------------------ |
+| `download(exportable, filename, type?)`               | `ExcelDownloadResult` | Returns buffer + filename + content type                     |
+| `downloadAsStream(exportable, filename, type?)`       | `StreamableFile`      | Returns a NestJS StreamableFile for direct controller return |
+| `store(exportable, filePath, type?, disk?)`            | `void`                | Writes the export to storage (default or named disk)         |
+| `raw(exportable, type)`                               | `Buffer`              | Returns the raw file buffer                                  |
 
 ### Export Methods (Decorator-based)
 
-| Method                                                    | Returns               | Description                          |
-| --------------------------------------------------------- | --------------------- | ------------------------------------ |
-| `downloadFromEntity(entityClass, data, filename, type?)`  | `ExcelDownloadResult` | Buffer + filename + content type     |
-| `downloadFromEntityAsStream(entityClass, data, filename, type?)` | `StreamableFile` | NestJS StreamableFile for controllers |
-| `storeFromEntity(entityClass, data, filePath, type?)`     | `void`                | Write to a local file                |
-| `rawFromEntity(entityClass, data, type)`                  | `Buffer`              | Raw file buffer                      |
+| Method                                                              | Returns               | Description                          |
+| ------------------------------------------------------------------- | --------------------- | ------------------------------------ |
+| `downloadFromEntity(entityClass, data, filename, type?)`            | `ExcelDownloadResult` | Buffer + filename + content type     |
+| `downloadFromEntityAsStream(entityClass, data, filename, type?)`    | `StreamableFile`      | NestJS StreamableFile for controllers |
+| `storeFromEntity(entityClass, data, filePath, type?, disk?)`        | `void`                | Write to storage (default or named disk) |
+| `rawFromEntity(entityClass, data, type)`                            | `Buffer`              | Raw file buffer                      |
 
 ### Import Methods
 
-| Method                                              | Returns                      | Description                                  |
-| --------------------------------------------------- | ---------------------------- | -------------------------------------------- |
-| `import(importable, filePath, type?)`               | `ImportResult`               | Read and process a local file                |
-| `importFromBuffer(importable, buffer, type?)`       | `ImportResult`               | Read and process a buffer                    |
-| `toArray(filePath, type?)`                          | `any[][]`                    | Shorthand: returns raw 2D array              |
-| `toCollection(filePath, type?)`                     | `Record<string, any>[]`      | Shorthand: returns objects using row 1 as headings |
+| Method                                              | Returns                      | Description                                          |
+| --------------------------------------------------- | ---------------------------- | ---------------------------------------------------- |
+| `import(importable, filePath, type?, disk?)`        | `ImportResult`               | Read and process a file from storage                 |
+| `importFromBuffer(importable, buffer, type?)`       | `ImportResult`               | Read and process a buffer                            |
+| `toArray(filePath, type?, disk?)`                   | `any[][]`                    | Shorthand: returns raw 2D array                      |
+| `toCollection(filePath, type?, disk?)`              | `Record<string, any>[]`      | Shorthand: returns objects using row 1 as headings   |
 
 ## Configuration Options
 
-| Option           | Type              | Default     | Description                                  |
-| ---------------- | ----------------- | ----------- | -------------------------------------------- |
-| `defaultType`    | `'xlsx' \| 'csv'` | `'xlsx'`    | Fallback type when extension is unrecognised |
-| `tempDirectory`  | `string`          | OS temp dir | Directory for temporary files                |
-| `csv.delimiter`  | `string`          | `','`       | CSV column delimiter                         |
-| `csv.quoteChar`  | `string`          | `'"'`       | CSV quote character                          |
-| `csv.lineEnding` | `string`          | `'\n'`      | CSV line ending                              |
-| `csv.useBom`     | `boolean`         | `false`     | Prepend UTF-8 BOM                            |
-| `csv.encoding`   | `BufferEncoding`  | `'utf-8'`   | Output encoding                              |
+| Option           | Type                          | Default     | Description                                    |
+| ---------------- | ----------------------------- | ----------- | ---------------------------------------------- |
+| `defaultType`    | `'xlsx' \| 'csv'`             | `'xlsx'`    | Fallback type when extension is unrecognised   |
+| `tempDirectory`  | `string`                      | OS temp dir | Directory for temporary files                  |
+| `disks`          | `Record<string, DiskConfig>`  | —           | Named storage backends (see Storage Drivers)   |
+| `defaultDisk`    | `string`                      | `'local'`   | Default disk name used when `disk` is omitted  |
+| `csv.delimiter`  | `string`                      | `','`       | CSV column delimiter                           |
+| `csv.quoteChar`  | `string`                      | `'"'`       | CSV quote character                            |
+| `csv.lineEnding` | `string`                      | `'\n'`      | CSV line ending                                |
+| `csv.useBom`     | `boolean`                     | `false`     | Prepend UTF-8 BOM                              |
+| `csv.encoding`   | `BufferEncoding`              | `'utf-8'`   | Output encoding                                |
 
 ## Testing
 

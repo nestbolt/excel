@@ -2,7 +2,7 @@
 
 All notable changes to `@nestbolt/excel` will be documented in this file.
 
-## Unreleased
+## v0.3.0 — Export Decorators + Storage Drivers
 
 ### Export Decorators
 
