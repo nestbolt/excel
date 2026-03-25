@@ -1012,7 +1012,7 @@ Inject `ExcelService` and call its methods:
 | `defaultType`    | `'xlsx' \| 'csv'`             | `'xlsx'`    | Fallback type when extension is unrecognised   |
 | `tempDirectory`  | `string`                      | OS temp dir | Directory for temporary files                  |
 | `disks`          | `Record<string, DiskConfig>`  | —           | Named storage backends (see Storage Drivers)   |
-| `defaultDisk`    | `string`                      | —           | Default disk name used when `disk` is omitted  |
+| `defaultDisk`    | `string`                      | `'local'`   | Default disk name used when `disk` is omitted  |
 | `csv.delimiter`  | `string`                      | `','`       | CSV column delimiter                           |
 | `csv.quoteChar`  | `string`                      | `'"'`       | CSV quote character                            |
 | `csv.lineEnding` | `string`                      | `'\n'`      | CSV line ending                                |
