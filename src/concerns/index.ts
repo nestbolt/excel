@@ -50,3 +50,26 @@ export {
   BeforeSheetEventPayload,
   AfterSheetEventPayload,
 } from "./with-events.interface";
+
+// Import — data receivers
+export { ToArray } from "./to-array.interface";
+export { ToCollection } from "./to-collection.interface";
+
+// Import — row processing
+export { WithHeadingRow } from "./with-heading-row.interface";
+export { WithImportMapping } from "./with-import-mapping.interface";
+export { WithColumnMapping } from "./with-column-mapping.interface";
+
+// Import — validation
+export {
+  WithValidation,
+  ValidationRules,
+  ValidationRule,
+} from "./with-validation.interface";
+export { SkipsOnError } from "./skips-on-error.interface";
+export { SkipsEmptyRows } from "./skips-empty-rows.interface";
+
+// Import — limits & batching
+export { WithLimit } from "./with-limit.interface";
+export { WithStartRow } from "./with-start-row.interface";
+export { WithBatchInserts } from "./with-batch-inserts.interface";

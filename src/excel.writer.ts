@@ -6,14 +6,13 @@ import type {
   WithMultipleSheets,
   WithProperties,
   WithEvents,
-  WithCsvSettings,
-  CsvSettings,
   FromTemplate,
   WithTemplateData,
 } from "./concerns";
 import { ExcelExportEvent } from "./concerns";
 import { populateSheet } from "./excel.sheet";
 import { parseCellRef } from "./helpers";
+import { resolveCsvSettings } from "./helpers/csv-settings";
 
 /* ------------------------------------------------------------------ */
 /*  Type guards                                                        */
@@ -29,10 +28,6 @@ function isWithProperties(obj: any): obj is WithProperties {
 
 function isWithEvents(obj: any): obj is WithEvents {
   return typeof obj.registerEvents === "function";
-}
-
-function isWithCsvSettings(obj: any): obj is WithCsvSettings {
-  return typeof obj.csvSettings === "function";
 }
 
 function isFromTemplate(obj: any): obj is FromTemplate {
@@ -158,30 +153,6 @@ export async function writeExport(
   // Default: XLSX
   const arrayBuffer = await workbook.xlsx.writeBuffer();
   return Buffer.from(arrayBuffer);
-}
-
-/* ------------------------------------------------------------------ */
-/*  CSV settings resolution                                            */
-/* ------------------------------------------------------------------ */
-
-function resolveCsvSettings(
-  exportable: object,
-  options: ExcelModuleOptions,
-): Required<CsvSettings> {
-  const defaults: Required<CsvSettings> = {
-    delimiter: ",",
-    quoteChar: '"',
-    lineEnding: "\n",
-    useBom: false,
-    encoding: "utf-8",
-  };
-
-  const global = options.csv ?? {};
-  const perExport = isWithCsvSettings(exportable)
-    ? exportable.csvSettings()
-    : {};
-
-  return { ...defaults, ...global, ...perExport };
 }
 
 /* ------------------------------------------------------------------ */

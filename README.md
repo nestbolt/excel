@@ -1,6 +1,6 @@
 <p align="center">
     <h1 align="center">@nestbolt/excel</h1>
-    <p align="center">Supercharged Excel and CSV exports for NestJS applications. Effortlessly create and download spreadsheets with powerful features and seamless integration.</p>
+    <p align="center">Supercharged Excel and CSV exports and imports for NestJS applications. Effortlessly create, download, and import spreadsheets with powerful features and seamless integration.</p>
 </p>
 
 <p align="center">
@@ -56,6 +56,18 @@ return this.excelService.downloadAsStream(new UsersExport(), "users.xlsx");
   - [WithFrozenRows / WithFrozenColumns](#withfrozenrows--withfrozencolumns)
   - [FromTemplate](#fromtemplate)
   - [WithTemplateData](#withtemplatedata)
+- [Imports](#imports)
+  - [ToArray](#toarray)
+  - [ToCollection](#tocollection)
+  - [WithHeadingRow](#withheadingrow)
+  - [WithImportMapping](#withimportmapping)
+  - [WithColumnMapping](#withcolumnmapping)
+  - [WithValidation](#withvalidation)
+  - [WithBatchInserts](#withbatchinserts)
+  - [WithStartRow](#withstartrow)
+  - [WithLimit](#withlimit)
+  - [SkipsEmptyRows](#skipsemptyrows)
+  - [SkipsOnError](#skipsonerror)
 - [Using the Service Directly](#using-the-service-directly)
 - [Configuration Options](#configuration-options)
 - [Testing](#testing)
@@ -476,9 +488,215 @@ class InvoiceExport implements FromTemplate, WithTemplateData {
 
 The `dataStartCell()` specifies where the first row of data is written. Each subsequent row is placed on the next row below.
 
+## Imports
+
+Import classes use the same **concern-based** pattern as exports. Implement one or more interfaces to configure how data is read, transformed, and validated.
+
+### Quick Import Example
+
+```typescript
+class UsersImport implements ToCollection, WithHeadingRow, WithValidation, SkipsOnError {
+  readonly hasHeadingRow = true as const;
+  readonly skipsOnError = true as const;
+
+  handleCollection(rows: Record<string, any>[]) {
+    // Process imported rows
+  }
+
+  rules() {
+    return {
+      name: [{ validate: (v) => v?.length > 0, message: "Name is required" }],
+      email: [{ validate: (v) => /^.+@.+\..+$/.test(v), message: "Invalid email" }],
+    };
+  }
+}
+
+// In your controller
+const result = await this.excelService.import(new UsersImport(), "users.xlsx");
+// result.rows, result.errors, result.skipped
+```
+
+### ToArray
+
+Receive imported data as a two-dimensional array.
+
+```typescript
+class DataImport implements ToArray {
+  handleArray(rows: any[][]) {
+    console.log(rows); // [[1, "Alice"], [2, "Bob"]]
+  }
+}
+```
+
+### ToCollection
+
+Receive imported data as an array of objects. Requires `WithHeadingRow` or `WithColumnMapping` to derive object keys.
+
+```typescript
+class UsersImport implements ToCollection, WithHeadingRow {
+  readonly hasHeadingRow = true as const;
+
+  handleCollection(rows: Record<string, any>[]) {
+    console.log(rows); // [{ ID: 1, Name: "Alice" }, ...]
+  }
+}
+```
+
+### WithHeadingRow
+
+Use a row in the spreadsheet as column headings. Defaults to row 1.
+
+```typescript
+class ImportWithCustomHeading implements WithHeadingRow {
+  readonly hasHeadingRow = true as const;
+
+  headingRow() {
+    return 2; // row 2 contains the headers
+  }
+}
+```
+
+### WithImportMapping
+
+Transform each row after reading.
+
+```typescript
+class MappedImport implements WithHeadingRow, WithImportMapping {
+  readonly hasHeadingRow = true as const;
+
+  mapRow(row: Record<string, any>) {
+    return {
+      fullName: row.first_name + " " + row.last_name,
+      email: row.email.toLowerCase(),
+    };
+  }
+}
+```
+
+### WithColumnMapping
+
+Map column letters or 1-based indices to named fields, useful for files without headers.
+
+```typescript
+class NoHeaderImport implements WithColumnMapping {
+  columnMapping() {
+    return { name: "A", email: "C", age: 2 };
+  }
+}
+```
+
+### WithValidation
+
+Validate imported rows using custom rules or class-validator DTOs.
+
+**Custom rules:**
+
+```typescript
+rules() {
+  return {
+    name: [
+      { validate: (v) => v?.length > 0, message: "Name is required" },
+    ],
+    email: [
+      { validate: (v) => /^.+@.+\..+$/.test(v), message: "Invalid email" },
+    ],
+  };
+}
+```
+
+**class-validator DTO:**
+
+```typescript
+import { IsString, IsEmail } from "class-validator";
+
+class UserDto {
+  @IsString() @IsNotEmpty() name: string;
+  @IsEmail() email: string;
+}
+
+// In your import class
+rules() {
+  return { dto: UserDto };
+}
+```
+
+> **Note:** DTO mode requires `class-validator` and `class-transformer` as peer dependencies:
+> ```bash
+> pnpm add class-validator class-transformer
+> ```
+
+The `ImportResult` returned from the service contains:
+
+```typescript
+interface ImportResult<T = any> {
+  rows: T[];                        // valid rows
+  errors: ImportValidationError[];  // per-row validation errors
+  skipped: number;                  // count of skipped rows
+}
+```
+
+### WithBatchInserts
+
+Insert imported rows in configurable batch sizes.
+
+```typescript
+class BatchImport implements WithBatchInserts {
+  batchSize() {
+    return 100;
+  }
+
+  async handleBatch(batch: any[]) {
+    await this.userRepo.save(batch);
+  }
+}
+```
+
+### WithStartRow
+
+Skip rows before a given row number.
+
+```typescript
+startRow() {
+  return 3; // start reading from row 3
+}
+```
+
+### WithLimit
+
+Limit the number of data rows read.
+
+```typescript
+limit() {
+  return 1000; // only read first 1000 data rows
+}
+```
+
+### SkipsEmptyRows
+
+Ignore blank rows during import.
+
+```typescript
+class CleanImport implements SkipsEmptyRows {
+  readonly skipsEmptyRows = true as const;
+}
+```
+
+### SkipsOnError
+
+Skip invalid rows instead of throwing. Without this concern, the first validation failure throws an error with all collected errors attached.
+
+```typescript
+class TolerantImport implements WithValidation, SkipsOnError {
+  readonly skipsOnError = true as const;
+  rules() { /* ... */ }
+}
+```
+
 ## Using the Service Directly
 
 Inject `ExcelService` and call its methods:
+
+### Export Methods
 
 | Method                                          | Returns               | Description                                                  |
 | ----------------------------------------------- | --------------------- | ------------------------------------------------------------ |
@@ -486,6 +704,15 @@ Inject `ExcelService` and call its methods:
 | `downloadAsStream(exportable, filename, type?)` | `StreamableFile`      | Returns a NestJS StreamableFile for direct controller return |
 | `store(exportable, filePath, type?)`            | `void`                | Writes the export to a local file                            |
 | `raw(exportable, type)`                         | `Buffer`              | Returns the raw file buffer                                  |
+
+### Import Methods
+
+| Method                                              | Returns                      | Description                                  |
+| --------------------------------------------------- | ---------------------------- | -------------------------------------------- |
+| `import(importable, filePath, type?)`               | `ImportResult`               | Read and process a local file                |
+| `importFromBuffer(importable, buffer, type?)`       | `ImportResult`               | Read and process a buffer                    |
+| `toArray(filePath, type?)`                          | `any[][]`                    | Shorthand: returns raw 2D array              |
+| `toCollection(filePath, type?)`                     | `Record<string, any>[]`      | Shorthand: returns objects using row 1 as headings |
 
 ## Configuration Options
 

@@ -2,9 +2,14 @@ import { Inject, Injectable, Logger, StreamableFile } from "@nestjs/common";
 import * as fs from "fs";
 import * as path from "path";
 import { EXCEL_OPTIONS, ExcelType, CONTENT_TYPES } from "./excel.constants";
-import type { ExcelModuleOptions, ExcelDownloadResult } from "./interfaces";
+import type {
+  ExcelModuleOptions,
+  ExcelDownloadResult,
+  ImportResult,
+} from "./interfaces";
 import { detectType } from "./helpers";
 import { writeExport } from "./excel.writer";
+import { readImport } from "./excel.reader";
 
 @Injectable()
 export class ExcelService {
@@ -90,6 +95,60 @@ export class ExcelService {
    */
   async raw(exportable: object, writerType: ExcelType): Promise<Buffer> {
     return writeExport(exportable, writerType, this.options);
+  }
+
+  /* ---------------------------------------------------------------- */
+  /*  Import                                                           */
+  /* ---------------------------------------------------------------- */
+
+  /**
+   * Read and process a local file through the importable's concerns.
+   */
+  async import(
+    importable: object,
+    filePath: string,
+    readerType?: ExcelType,
+  ): Promise<ImportResult> {
+    const type = readerType ?? this.resolveType(path.basename(filePath));
+    return readImport(importable, filePath, type, this.options);
+  }
+
+  /**
+   * Read and process a buffer through the importable's concerns.
+   */
+  async importFromBuffer(
+    importable: object,
+    buffer: Buffer,
+    readerType?: ExcelType,
+  ): Promise<ImportResult> {
+    const type = readerType ?? ExcelType.XLSX;
+    return readImport(importable, buffer, type, this.options);
+  }
+
+  /**
+   * Shorthand: read a file and return the raw 2D array.
+   */
+  async toArray(
+    filePath: string,
+    readerType?: ExcelType,
+  ): Promise<any[][]> {
+    const type = readerType ?? this.resolveType(path.basename(filePath));
+    const result = await readImport({}, filePath, type, this.options);
+    return result.rows;
+  }
+
+  /**
+   * Shorthand: read a file and return an array of objects using row 1
+   * as headings.
+   */
+  async toCollection(
+    filePath: string,
+    readerType?: ExcelType,
+  ): Promise<Record<string, any>[]> {
+    const type = readerType ?? this.resolveType(path.basename(filePath));
+    const importable = { hasHeadingRow: true as const };
+    const result = await readImport(importable, filePath, type, this.options);
+    return result.rows;
   }
 
   /* ---------------------------------------------------------------- */
