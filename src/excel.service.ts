@@ -1,5 +1,4 @@
 import { Inject, Injectable, Logger, StreamableFile } from "@nestjs/common";
-import * as fs from "fs";
 import * as path from "path";
 import { EXCEL_OPTIONS, ExcelType, CONTENT_TYPES } from "./excel.constants";
 import type {
@@ -11,6 +10,7 @@ import { detectType } from "./helpers";
 import { writeExport } from "./excel.writer";
 import { readImport } from "./excel.reader";
 import { buildExportFromEntity } from "./decorators";
+import { DiskManager } from "./storage/disk-manager";
 
 @Injectable()
 export class ExcelService {
@@ -18,6 +18,7 @@ export class ExcelService {
 
   constructor(
     @Inject(EXCEL_OPTIONS) private readonly options: ExcelModuleOptions,
+    private readonly diskManager: DiskManager,
   ) {}
 
   /**
@@ -71,24 +72,26 @@ export class ExcelService {
   }
 
   /**
-   * Generate the export and write it to a local file path.
+   * Generate the export and write it to storage.
+   * When `disk` is specified, uses the named storage driver.
+   * Otherwise uses the default disk (implicit local driver).
    */
   async store(
     exportable: object,
     filePath: string,
     writerType?: ExcelType,
+    disk?: string,
   ): Promise<void> {
     const type =
       writerType ?? this.resolveType(path.basename(filePath));
     const buffer = await writeExport(exportable, type, this.options);
 
-    const dir = path.dirname(filePath);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-    fs.writeFileSync(filePath, buffer);
+    const driver = this.diskManager.disk(disk);
+    await driver.put(filePath, buffer);
 
-    this.logger.log(`Export stored at ${filePath}`);
+    this.logger.log(
+      `Export stored at ${filePath} (disk: ${disk ?? "default"})`,
+    );
   }
 
   /**
@@ -129,16 +132,17 @@ export class ExcelService {
   }
 
   /**
-   * Export a decorated entity class to a local file.
+   * Export a decorated entity class to storage.
    */
   async storeFromEntity<T>(
     entityClass: new (...args: any[]) => T,
     data: T[],
     filePath: string,
     writerType?: ExcelType,
+    disk?: string,
   ): Promise<void> {
     const exportable = buildExportFromEntity(entityClass, data);
-    return this.store(exportable, filePath, writerType);
+    return this.store(exportable, filePath, writerType, disk);
   }
 
   /**
@@ -158,14 +162,20 @@ export class ExcelService {
   /* ---------------------------------------------------------------- */
 
   /**
-   * Read and process a local file through the importable's concerns.
+   * Read and process a file through the importable's concerns.
+   * When `disk` is specified, reads from the named storage driver.
    */
   async import(
     importable: object,
     filePath: string,
     readerType?: ExcelType,
+    disk?: string,
   ): Promise<ImportResult> {
     const type = readerType ?? this.resolveType(path.basename(filePath));
+    if (disk) {
+      const buffer = await this.diskManager.disk(disk).get(filePath);
+      return readImport(importable, buffer, type, this.options);
+    }
     return readImport(importable, filePath, type, this.options);
   }
 
@@ -183,12 +193,19 @@ export class ExcelService {
 
   /**
    * Shorthand: read a file and return the raw 2D array.
+   * When `disk` is specified, reads from the named storage driver.
    */
   async toArray(
     filePath: string,
     readerType?: ExcelType,
+    disk?: string,
   ): Promise<any[][]> {
     const type = readerType ?? this.resolveType(path.basename(filePath));
+    if (disk) {
+      const buffer = await this.diskManager.disk(disk).get(filePath);
+      const result = await readImport({}, buffer, type, this.options);
+      return result.rows;
+    }
     const result = await readImport({}, filePath, type, this.options);
     return result.rows;
   }
@@ -196,13 +213,20 @@ export class ExcelService {
   /**
    * Shorthand: read a file and return an array of objects using row 1
    * as headings.
+   * When `disk` is specified, reads from the named storage driver.
    */
   async toCollection(
     filePath: string,
     readerType?: ExcelType,
+    disk?: string,
   ): Promise<Record<string, any>[]> {
     const type = readerType ?? this.resolveType(path.basename(filePath));
     const importable = { hasHeadingRow: true as const };
+    if (disk) {
+      const buffer = await this.diskManager.disk(disk).get(filePath);
+      const result = await readImport(importable, buffer, type, this.options);
+      return result.rows;
+    }
     const result = await readImport(importable, filePath, type, this.options);
     return result.rows;
   }

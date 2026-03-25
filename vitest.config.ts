@@ -8,7 +8,15 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       include: ['src/**/*.ts'],
-      exclude: ['src/index.ts', 'src/**/index.ts', 'src/interfaces/**'],
+      exclude: [
+        'src/index.ts',
+        'src/**/index.ts',
+        'src/interfaces/**',
+        'src/**/*.interface.ts',
+        'src/**/interfaces.ts',
+        'src/storage/storage.types.ts',
+        'src/storage/storage-driver.interface.ts',
+      ],
     },
   },
 });

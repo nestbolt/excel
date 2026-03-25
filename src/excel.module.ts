@@ -2,6 +2,7 @@ import { DynamicModule, Module } from "@nestjs/common";
 import { EXCEL_OPTIONS } from "./excel.constants";
 import { ExcelModuleOptions, ExcelAsyncOptions } from "./interfaces";
 import { ExcelService } from "./excel.service";
+import { DiskManager } from "./storage/disk-manager";
 
 @Module({})
 export class ExcelModule {
@@ -11,9 +12,10 @@ export class ExcelModule {
       global: true,
       providers: [
         { provide: EXCEL_OPTIONS, useValue: options },
+        DiskManager,
         ExcelService,
       ],
-      exports: [ExcelService],
+      exports: [ExcelService, DiskManager],
     };
   }
 
@@ -28,9 +30,10 @@ export class ExcelModule {
           useFactory: options.useFactory,
           inject: options.inject ?? [],
         },
+        DiskManager,
         ExcelService,
       ],
-      exports: [ExcelService],
+      exports: [ExcelService, DiskManager],
     };
   }
 }

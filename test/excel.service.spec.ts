@@ -7,6 +7,7 @@ import * as path from "path";
 import { ExcelService } from "../src/excel.service";
 import { ExcelModule } from "../src/excel.module";
 import { EXCEL_OPTIONS, ExcelType } from "../src/excel.constants";
+import { DiskManager } from "../src/storage/disk-manager";
 import {
   detectType,
   parseCellRef,
@@ -47,6 +48,7 @@ async function createService(options = {}): Promise<ExcelService> {
   const module: TestingModule = await Test.createTestingModule({
     providers: [
       { provide: EXCEL_OPTIONS, useValue: options },
+      DiskManager,
       ExcelService,
     ],
   }).compile();
