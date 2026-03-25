@@ -1,6 +1,6 @@
 {
   "name": "@nestbolt/excel",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "packageManager": "pnpm@9.15.4",
   "description": "Supercharged Excel and CSV exports and imports for NestJS applications. Effortlessly create, download, and import spreadsheets with powerful features and seamless integration.",
   "main": "dist/index.js",
