@@ -7,6 +7,7 @@ import * as path from "path";
 import { IsEmail, IsNotEmpty, IsString } from "class-validator";
 import { ExcelService } from "../src/excel.service";
 import { EXCEL_OPTIONS, ExcelType } from "../src/excel.constants";
+import { DiskManager } from "../src/storage/disk-manager";
 import type {
   ToArray,
   ToCollection,
@@ -30,6 +31,7 @@ async function createService(options = {}): Promise<ExcelService> {
   const module: TestingModule = await Test.createTestingModule({
     providers: [
       { provide: EXCEL_OPTIONS, useValue: options },
+      DiskManager,
       ExcelService,
     ],
   }).compile();

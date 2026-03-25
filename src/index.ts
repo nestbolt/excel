@@ -97,3 +97,15 @@ export { ExportColumn } from "./decorators";
 export { ExportIgnore } from "./decorators";
 export { buildExportFromEntity } from "./decorators";
 export type { ExportableOptions, ExportColumnOptions } from "./decorators";
+
+// Storage
+export type { StorageDriver } from "./storage";
+export type {
+  DiskConfig,
+  LocalDiskConfig,
+  S3DiskConfig,
+  GCSDiskConfig,
+  AzureDiskConfig,
+} from "./storage";
+export { DiskManager } from "./storage";
+export { LocalDriver, S3Driver, GCSDriver, AzureDriver } from "./storage";

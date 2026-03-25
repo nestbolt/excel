@@ -13,6 +13,18 @@ All notable changes to `@nestbolt/excel` will be documented in this file.
 - **ExcelService** — New entity-based methods: `downloadFromEntity()`, `downloadFromEntityAsStream()`, `storeFromEntity()`, `rawFromEntity()`
 - Full inheritance support: child classes inherit, override, or ignore parent columns
 
+### Storage Drivers
+
+- **StorageDriver** — Pluggable interface with `put()`, `get()`, `delete()`, `exists()` methods
+- **LocalDriver** — Local filesystem storage (default, zero-config)
+- **S3Driver** — AWS S3 and S3-compatible services (MinIO, R2, DigitalOcean Spaces)
+- **GCSDriver** — Google Cloud Storage
+- **AzureDriver** — Azure Blob Storage
+- **DiskManager** — Injectable service to manage named storage backends with lazy instantiation and caching
+- `store()`, `storeFromEntity()`, `import()`, `toArray()`, `toCollection()` now accept an optional `disk` parameter
+- Three credential strategies: SDK default chains, inline config, pre-configured client injection
+- All cloud SDKs are optional peer dependencies — only install what you use
+
 ## v0.2.0 — Import XLSX/CSV with Validation
 
 ### Features

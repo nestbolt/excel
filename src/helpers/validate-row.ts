@@ -50,7 +50,7 @@ async function loadDtoDeps(): Promise<{ validator: any; transformer: any }> {
   try {
     cachedValidator = await import("class-validator");
     cachedTransformer = await import("class-transformer");
-  } catch {
+  } catch /* v8 ignore next 4 */ {
     throw new Error(
       "WithValidation with DTO requires class-validator and class-transformer. " +
         "Install them: pnpm add class-validator class-transformer",

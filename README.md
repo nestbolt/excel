@@ -80,6 +80,12 @@ return this.excelService.downloadFromEntityAsStream(UserEntity, users, "users.xl
   - [WithLimit](#withlimit)
   - [SkipsEmptyRows](#skipsemptyrows)
   - [SkipsOnError](#skipsonerror)
+- [Storage Drivers](#storage-drivers)
+  - [LocalDriver](#localdriver)
+  - [S3Driver](#s3driver)
+  - [GCSDriver](#gcsdriver)
+  - [AzureDriver](#azuredriver)
+  - [Using DiskManager Directly](#using-diskmanager-directly)
 - [Using the Service Directly](#using-the-service-directly)
 - [Configuration Options](#configuration-options)
 - [Testing](#testing)
@@ -815,6 +821,156 @@ Skip invalid rows instead of throwing. Without this concern, the first validatio
 class TolerantImport implements WithValidation, SkipsOnError {
   readonly skipsOnError = true as const;
   rules() { /* ... */ }
+}
+```
+
+## Storage Drivers
+
+By default, `store()` and `import()` work with the local filesystem. You can configure named storage backends ("disks") to read/write files from cloud storage.
+
+### Configuration
+
+```typescript
+ExcelModule.forRoot({
+  disks: {
+    local: { driver: "local", root: "./storage" },
+    s3: {
+      driver: "s3",
+      bucket: "my-reports",
+      region: "us-east-1",
+      prefix: "excel",
+    },
+    gcs: {
+      driver: "gcs",
+      bucket: "my-reports",
+      keyFilename: "/path/to/service-account.json",
+    },
+    azure: {
+      driver: "azure",
+      container: "reports",
+      connectionString: process.env.AZURE_STORAGE_CONNECTION_STRING,
+    },
+  },
+  defaultDisk: "local",
+});
+```
+
+### Using the disk parameter
+
+```typescript
+// Store to S3
+await excelService.store(new UsersExport(), "reports/users.xlsx", undefined, "s3");
+
+// Import from GCS
+const result = await excelService.import(new UsersImport(), "uploads/data.xlsx", undefined, "gcs");
+
+// toArray / toCollection also support disk
+const rows = await excelService.toArray("data.xlsx", undefined, "s3");
+```
+
+Without the `disk` parameter, methods use the `defaultDisk` (falls back to an implicit local driver).
+
+### LocalDriver
+
+Default driver. No additional packages needed.
+
+```typescript
+{ driver: "local", root: "./storage" }
+```
+
+### S3Driver
+
+Works with AWS S3 and any S3-compatible service (MinIO, R2, DigitalOcean Spaces).
+
+```bash
+pnpm add @aws-sdk/client-s3
+```
+
+```typescript
+// SDK default credentials (env vars, IAM roles, ~/.aws/credentials)
+{ driver: "s3", bucket: "my-bucket", region: "us-east-1" }
+
+// Inline credentials
+{ driver: "s3", bucket: "my-bucket", region: "us-east-1",
+  credentials: { accessKeyId: "...", secretAccessKey: "..." } }
+
+// S3-compatible endpoint
+{ driver: "s3", bucket: "my-bucket", endpoint: "http://localhost:9000" }
+
+// Pre-configured client
+{ driver: "s3", bucket: "my-bucket", client: myS3Client }
+```
+
+### GCSDriver
+
+```bash
+pnpm add @google-cloud/storage
+```
+
+```typescript
+// Application Default Credentials
+{ driver: "gcs", bucket: "my-bucket" }
+
+// Service account keyfile
+{ driver: "gcs", bucket: "my-bucket", keyFilename: "/path/to/key.json" }
+
+// Pre-configured client
+{ driver: "gcs", bucket: "my-bucket", client: myStorageInstance }
+```
+
+### AzureDriver
+
+```bash
+pnpm add @azure/storage-blob
+```
+
+```typescript
+// Connection string
+{ driver: "azure", container: "reports",
+  connectionString: "DefaultEndpointsProtocol=https;..." }
+
+// Account name + key
+{ driver: "azure", container: "reports",
+  accountName: "myaccount", accountKey: "mykey" }
+
+// Pre-configured ContainerClient
+{ driver: "azure", container: "reports", client: myContainerClient }
+```
+
+### Pre-configured client via forRootAsync
+
+For full control over authentication (secrets managers, vaults, custom middleware):
+
+```typescript
+ExcelModule.forRootAsync({
+  imports: [AwsModule],
+  inject: [S3Client],
+  useFactory: (s3Client: S3Client) => ({
+    disks: {
+      s3: { driver: "s3", bucket: "my-bucket", client: s3Client },
+    },
+    defaultDisk: "s3",
+  }),
+});
+```
+
+### Using DiskManager Directly
+
+Inject `DiskManager` for direct storage operations:
+
+```typescript
+import { DiskManager } from "@nestbolt/excel";
+
+@Injectable()
+export class ReportService {
+  constructor(private readonly diskManager: DiskManager) {}
+
+  async cleanup(path: string) {
+    const driver = this.diskManager.disk("s3");
+    if (await driver.exists(path)) {
+      await driver.delete(path);
+    }
+  }
 }
 ```
 
