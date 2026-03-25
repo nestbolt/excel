@@ -738,6 +738,38 @@ describe("ExcelService — Import", () => {
       await service.import(new AsyncBatch(), filePath);
       expect(results).toEqual([3, 1]);
     });
+
+    it("should throw when batchSize is zero", async () => {
+      class ZeroBatch implements WithBatchInserts {
+        batchSize() {
+          return 0;
+        }
+        handleBatch() {}
+      }
+
+      const filePath = path.join(tmpDir, "zero-batch.xlsx");
+      await createXlsxFile(filePath, [[1]]);
+
+      await expect(
+        service.import(new ZeroBatch(), filePath),
+      ).rejects.toThrow("batchSize() must return a positive integer");
+    });
+
+    it("should throw when batchSize is negative", async () => {
+      class NegBatch implements WithBatchInserts {
+        batchSize() {
+          return -5;
+        }
+        handleBatch() {}
+      }
+
+      const filePath = path.join(tmpDir, "neg-batch.xlsx");
+      await createXlsxFile(filePath, [[1]]);
+
+      await expect(
+        service.import(new NegBatch(), filePath),
+      ).rejects.toThrow("batchSize() must return a positive integer");
+    });
   });
 
   /* ---------------------------------------------------------------- */

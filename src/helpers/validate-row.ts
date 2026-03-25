@@ -40,26 +40,34 @@ function validateWithRules(
     : null;
 }
 
-async function validateWithDto(
-  row: Record<string, any>,
-  dto: new (...args: any[]) => any,
-  rowNumber: number,
-): Promise<ImportValidationError | null> {
-  let classValidator: any;
-  let classTransformer: any;
+let cachedValidator: any;
+let cachedTransformer: any;
 
+async function loadDtoDeps(): Promise<{ validator: any; transformer: any }> {
+  if (cachedValidator && cachedTransformer) {
+    return { validator: cachedValidator, transformer: cachedTransformer };
+  }
   try {
-    classValidator = await import("class-validator");
-    classTransformer = await import("class-transformer");
+    cachedValidator = await import("class-validator");
+    cachedTransformer = await import("class-transformer");
   } catch {
     throw new Error(
       "WithValidation with DTO requires class-validator and class-transformer. " +
         "Install them: pnpm add class-validator class-transformer",
     );
   }
+  return { validator: cachedValidator, transformer: cachedTransformer };
+}
 
-  const instance = classTransformer.plainToInstance(dto, row);
-  const errors: any[] = classValidator.validateSync(instance);
+async function validateWithDto(
+  row: Record<string, any>,
+  dto: new (...args: any[]) => any,
+  rowNumber: number,
+): Promise<ImportValidationError | null> {
+  const { validator, transformer } = await loadDtoDeps();
+
+  const instance = transformer.plainToInstance(dto, row);
+  const errors: any[] = validator.validateSync(instance);
 
   return mapDtoErrors(errors, rowNumber);
 }

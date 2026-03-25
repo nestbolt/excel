@@ -150,6 +150,7 @@ export async function processSheet(
   const useObjects = headings !== null || useColumnMapping;
 
   let processedRows: any[];
+  let objectKeyOrder: string[] | null = null;
 
   if (useObjects) {
     let columnMap: Record<string, number> | null = null;
@@ -157,13 +158,23 @@ export async function processSheet(
     if (useColumnMapping) {
       const raw = (importable as WithColumnMapping).columnMapping();
       columnMap = {};
+      const entries: [string, number][] = [];
       for (const [fieldName, colRef] of Object.entries(raw)) {
-        if (typeof colRef === "number") {
-          columnMap[fieldName] = colRef - 1; // convert 1-based to 0-based
-        } else {
-          columnMap[fieldName] = columnLetterToNumber(colRef) - 1;
-        }
+        const idx =
+          typeof colRef === "number"
+            ? colRef - 1
+            : columnLetterToNumber(colRef) - 1;
+        columnMap[fieldName] = idx;
+        entries.push([fieldName, idx]);
       }
+      // Deterministic key order: sorted by column index
+      objectKeyOrder = entries
+        .sort((a, b) => a[1] - b[1])
+        .map(([k]) => k);
+    }
+
+    if (!objectKeyOrder && headings) {
+      objectKeyOrder = headings.map((h, i) => h || `__col${i}`);
     }
 
     processedRows = dataRows.map((r) => {
@@ -232,6 +243,11 @@ export async function processSheet(
   // --- deliver to importable ----------------------------------------
   if (isWithBatchInserts(importable)) {
     const size = importable.batchSize();
+    if (!Number.isInteger(size) || size < 1) {
+      throw new Error(
+        `WithBatchInserts.batchSize() must return a positive integer, got ${size}.`,
+      );
+    }
     for (let i = 0; i < validRows.length; i += size) {
       const batch = validRows.slice(i, i + size);
       await importable.handleBatch(batch);
@@ -243,10 +259,12 @@ export async function processSheet(
   }
 
   if (isToArray(importable)) {
-    // If rows are objects, convert back to arrays for ToArray
-    const arrayRows = useObjects
-      ? validRows.map((obj) => Object.values(obj))
-      : validRows;
+    // If rows are objects, convert back to arrays for ToArray using
+    // deterministic key order so column ordering matches the spreadsheet.
+    const arrayRows =
+      useObjects && objectKeyOrder
+        ? validRows.map((obj) => objectKeyOrder!.map((k) => obj[k]))
+        : validRows;
     await importable.handleArray(arrayRows);
   }
 

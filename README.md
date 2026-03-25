@@ -607,11 +607,11 @@ rules() {
 **class-validator DTO:**
 
 ```typescript
-import { IsString, IsEmail } from "class-validator";
+import { IsString, IsEmail, IsNotEmpty } from "class-validator";
 
 class UserDto {
-  @IsString() @IsNotEmpty() name: string;
-  @IsEmail() email: string;
+  @IsString() @IsNotEmpty() name!: string;
+  @IsEmail() email!: string;
 }
 
 // In your import class
