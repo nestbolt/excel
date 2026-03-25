@@ -68,6 +68,16 @@ describe("AzureDriver", () => {
     expect(driver).toBeDefined();
   });
 
+  it("should throw when DefaultAzureCredential branch has no accountName", () => {
+    expect(
+      () =>
+        new AzureDriver({
+          driver: "azure",
+          container: "test",
+        }),
+    ).toThrow('AzureDriver requires "accountName"');
+  });
+
   describe("put", () => {
     it("should upload buffer with correct length", async () => {
       const driver = createDriver();

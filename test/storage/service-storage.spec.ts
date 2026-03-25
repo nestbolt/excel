@@ -95,11 +95,14 @@ describe("ExcelService — storage integration", () => {
 
   describe("import() with disk", () => {
     it("should import from the named disk", async () => {
-      // First store a file
       await service.store(new SimpleExport(), "data.xlsx", undefined, "local");
-
-      // Then import it back using the disk
       const result = await service.import({}, "data.xlsx", undefined, "local");
+      expect(result.rows.length).toBeGreaterThan(0);
+    });
+
+    it("should use defaultDisk when disk param is omitted", async () => {
+      await service.store(new SimpleExport(), "default.xlsx");
+      const result = await service.import({}, "default.xlsx");
       expect(result.rows.length).toBeGreaterThan(0);
     });
   });
@@ -108,6 +111,12 @@ describe("ExcelService — storage integration", () => {
     it("should read file from disk and return 2D array", async () => {
       await service.store(new SimpleExport(), "arr.xlsx", undefined, "local");
       const rows = await service.toArray("arr.xlsx", undefined, "local");
+      expect(rows.length).toBeGreaterThan(0);
+    });
+
+    it("should use defaultDisk when disk param is omitted", async () => {
+      await service.store(new SimpleExport(), "arr2.xlsx");
+      const rows = await service.toArray("arr2.xlsx");
       expect(rows.length).toBeGreaterThan(0);
     });
   });
@@ -125,6 +134,13 @@ describe("ExcelService — storage integration", () => {
         undefined,
         "local",
       );
+      expect(rows.length).toBeGreaterThan(0);
+      expect(rows[0]).toHaveProperty("ID");
+    });
+
+    it("should use defaultDisk when disk param is omitted", async () => {
+      await service.store(new SimpleExport(), "coll2.xlsx");
+      const rows = await service.toCollection("coll2.xlsx");
       expect(rows.length).toBeGreaterThan(0);
       expect(rows[0]).toHaveProperty("ID");
     });

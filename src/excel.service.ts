@@ -172,11 +172,8 @@ export class ExcelService {
     disk?: string,
   ): Promise<ImportResult> {
     const type = readerType ?? this.resolveType(path.basename(filePath));
-    if (disk) {
-      const buffer = await this.diskManager.disk(disk).get(filePath);
-      return readImport(importable, buffer, type, this.options);
-    }
-    return readImport(importable, filePath, type, this.options);
+    const buffer = await this.diskManager.disk(disk).get(filePath);
+    return readImport(importable, buffer, type, this.options);
   }
 
   /**
@@ -201,12 +198,8 @@ export class ExcelService {
     disk?: string,
   ): Promise<any[][]> {
     const type = readerType ?? this.resolveType(path.basename(filePath));
-    if (disk) {
-      const buffer = await this.diskManager.disk(disk).get(filePath);
-      const result = await readImport({}, buffer, type, this.options);
-      return result.rows;
-    }
-    const result = await readImport({}, filePath, type, this.options);
+    const buffer = await this.diskManager.disk(disk).get(filePath);
+    const result = await readImport({}, buffer, type, this.options);
     return result.rows;
   }
 
@@ -222,12 +215,8 @@ export class ExcelService {
   ): Promise<Record<string, any>[]> {
     const type = readerType ?? this.resolveType(path.basename(filePath));
     const importable = { hasHeadingRow: true as const };
-    if (disk) {
-      const buffer = await this.diskManager.disk(disk).get(filePath);
-      const result = await readImport(importable, buffer, type, this.options);
-      return result.rows;
-    }
-    const result = await readImport(importable, filePath, type, this.options);
+    const buffer = await this.diskManager.disk(disk).get(filePath);
+    const result = await readImport(importable, buffer, type, this.options);
     return result.rows;
   }
 

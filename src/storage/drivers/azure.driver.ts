@@ -28,6 +28,11 @@ export class AzureDriver implements StorageDriver {
         );
         this.containerClient = blobService.getContainerClient(config.container);
       } else {
+        if (!config.accountName) {
+          throw new Error(
+            'AzureDriver requires "accountName" when using DefaultAzureCredential.',
+          );
+        }
         const { DefaultAzureCredential } = this.loadIdentitySdk();
         const blobService = new sdk.BlobServiceClient(
           `https://${config.accountName}.blob.core.windows.net`,
